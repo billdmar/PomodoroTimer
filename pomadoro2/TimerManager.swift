@@ -26,6 +26,11 @@ class TimerManager: ObservableObject {
     @Published var focusEmoji = "🍅"
     @Published var breakEmoji = "😌"
     
+    // Leaderboard integration
+    @Published var leaderboardManager = LeaderboardManager()
+    @Published var lastCompletionDate: Date?
+    private let userDefaults = UserDefaults.standard
+    
     private var timer: Timer?
     
     private let encouragingMessages = [
@@ -89,6 +94,11 @@ class TimerManager: ObservableObject {
         selectRandomMessage()
         generateRandomMotivationalQuote()
         requestNotificationPermission()
+        
+        // Load last completion date
+        if let lastDate = userDefaults.object(forKey: "lastCompletionDate") as? Date {
+            lastCompletionDate = lastDate
+        }
     }
     
     var currentEmoji: String {
@@ -169,11 +179,26 @@ class TimerManager: ObservableObject {
         completionMessage = "\(completedMode) session complete! Time for a \(nextMode.lowercased()) 🎉"
         showingCompletionAlert = true
         
-        // Play system sound (removed haptic feedback to avoid compilation issues)
+        // Play system sound
         AudioServicesPlaySystemSound(1005) // System notification sound
         
         // Send local notification
         sendCompletionNotification(completedMode: completedMode, nextMode: nextMode)
+        
+        // Update leaderboard stats if it was a focus session
+        if isFocusMode {
+            let focusMinutes = Int(focusDuration / 60)
+            let isNewDay = checkIfNewDay()
+            
+            leaderboardManager.updateUserStats(
+                focusMinutesCompleted: focusMinutes,
+                isNewDay: isNewDay
+            )
+            
+            // Update last completion date
+            lastCompletionDate = Date()
+            userDefaults.set(lastCompletionDate, forKey: "lastCompletionDate")
+        }
         
         if isFocusMode {
             // Switch to break mode
@@ -184,6 +209,17 @@ class TimerManager: ObservableObject {
             isFocusMode = true
             timeRemaining = focusDuration
         }
+    }
+    
+    private func checkIfNewDay() -> Bool {
+        guard let lastDate = lastCompletionDate else {
+            return true // First completion ever
+        }
+        
+        let calendar = Calendar.current
+        let today = Date()
+        
+        return !calendar.isDate(lastDate, inSameDayAs: today)
     }
     
     private func requestNotificationPermission() {
