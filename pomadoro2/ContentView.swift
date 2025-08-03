@@ -12,6 +12,7 @@ struct ContentView: View {
     @StateObject private var timerManager = TimerManager()
     @State private var showingSettings = false
     @State private var showingWelcome = true
+    @State private var showingStats = false
     @State private var showingLeaderboard = false
     @State private var colorShift: CGFloat = 0
     @State private var emojiHovered = false
@@ -27,9 +28,16 @@ struct ContentView: View {
                     // Full screen timer view
                     fullScreenTimerView(geometry: geometry)
                 } else {
-                    // Clean background
-                    Color.white
-                        .ignoresSafeArea()
+                    // Clean background with subtle gradient
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color(.systemBackground),
+                            Color(.systemGray6).opacity(0.3)
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .ignoresSafeArea()
                     
                     if showingWelcome {
                         WelcomeView(showingWelcome: $showingWelcome)
@@ -37,13 +45,21 @@ struct ContentView: View {
                         mainTimerView
                     }
                 }
+                
+                // App lock overlay - only show when trying to leave app, not during normal use
+                if timerManager.appLockManager.isAppLocked && timerManager.appLockManager.showingUnlockAlert {
+                    AppLockOverlay(appLockManager: timerManager.appLockManager)
+                }
             }
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView(timerManager: timerManager)
         }
+        .sheet(isPresented: $showingStats) {
+            StatsView(timerManager: timerManager)
+        }
         .sheet(isPresented: $showingLeaderboard) {
-            LeaderboardView()
+            LeaderboardView(firebaseManager: timerManager.firebaseManagerPublished)
         }
         .alert("Timer Complete! 🎉", isPresented: $timerManager.showingCompletionAlert) {
             Button("Start \(timerManager.isFocusMode ? "Focus" : "Break")") {
@@ -152,153 +168,192 @@ struct ContentView: View {
     
     private var mainTimerView: some View {
         VStack(spacing: 0) {
-            // Fixed header at top
-            VStack(spacing: 8) {
-                Text("🍅 Pomodoro")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(.primary)
+            // Header with stats button in top right
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("🍅 Pomodoro")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(.primary)
+                    
+                    Text(timerManager.isFocusMode ? "Focus Time" : "Break Time")
+                        .font(.title3)
+                        .foregroundColor(timerManager.isFocusMode ? .red : .green)
+                        .fontWeight(.medium)
+                }
                 
-                Text(timerManager.isFocusMode ? "Focus Time" : "Break Time")
-                    .font(.title3)
-                    .foregroundColor(timerManager.isFocusMode ? .red : .green)
-                    .fontWeight(.medium)
-            }
-            .frame(height: 80)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 10)
-            
-            // Main content area - centered
-            VStack(spacing: 25) {
                 Spacer()
                 
-                // Timer display - perfectly centered
+                // Stats button in top right
+                Button(action: {
+                    showingStats = true
+                }) {
+                    Image(systemName: "calendar")
+                        .font(.title2)
+                        .foregroundColor(timerManager.isRunning ? .gray : .primary)
+                        .frame(width: 44, height: 44)
+                        .background(
+                            Circle()
+                                .fill(Color(.systemGray5))
+                                .opacity(timerManager.isRunning ? 0.5 : 1.0)
+                        )
+                }
+                .disabled(timerManager.isRunning)
+            }
+            .padding(.horizontal, 30)
+            .padding(.top, 10)
+            .frame(height: 80)
+            
+            // Today's quick stats section
+            HStack(spacing: 20) {
+                QuickStatCard(
+                    icon: "brain.head.profile",
+                    value: "\(timerManager.todayFocusMinutes)",
+                    label: "Today's Focus",
+                    color: .red
+                )
+                
+                QuickStatCard(
+                    icon: "flame.fill",
+                    value: "\(timerManager.currentStreak)",
+                    label: "Day Streak",
+                    color: .orange
+                )
+                
+                QuickStatCard(
+                    icon: "clock.fill",
+                    value: "\(timerManager.totalFocusMinutes)",
+                    label: "Total Minutes",
+                    color: .blue
+                )
+            }
+            .padding(.horizontal, 30)
+            .padding(.vertical, 20)
+            
+            // Main timer section
+            VStack(spacing: 20) {
+                // Emoji section - moved up
+                VStack(spacing: 16) {
+                    Text(timerManager.currentEmoji)
+                        .font(.system(size: 80))
+                        .scaleEffect(1.0)
+                        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: timerManager.currentEmoji)
+                    
+                    // Helper text
+                    if !timerManager.isRunning {
+                        Text("Tap timer to start \(timerManager.isFocusMode ? "focus" : "break") session")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .animation(.easeInOut(duration: 0.3), value: timerManager.isFocusMode)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                
+                // Timer display with modern design
                 ZStack {
-                    // Subtle background circle
+                    // Outer glow effect
                     Circle()
-                        .stroke(Color.gray.opacity(0.1), lineWidth: 8)
-                        .frame(width: 250, height: 250)
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    (timerManager.isFocusMode ? Color.red : Color.green).opacity(0.1),
+                                    Color.clear
+                                ],
+                                center: .center,
+                                startRadius: 100,
+                                endRadius: 140
+                            )
+                        )
+                        .frame(width: 280, height: 280)
+                    
+                    // Background circle with subtle shadow
+                    Circle()
+                        .fill(Color(.systemBackground))
+                        .frame(width: 260, height: 260)
+                        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
                     
                     // Progress circle
                     Circle()
                         .trim(from: 0, to: timerManager.progress)
                         .stroke(
-                            timerManager.isFocusMode ?
-                                LinearGradient(colors: [.red.opacity(0.8), .red], startPoint: .topLeading, endPoint: .bottomTrailing) :
-                                LinearGradient(colors: [.green.opacity(0.8), .green], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                            LinearGradient(
+                                colors: timerManager.isFocusMode ?
+                                    [Color.red.opacity(0.7), Color.red, Color.orange.opacity(0.8)] :
+                                    [Color.green.opacity(0.7), Color.green, Color.mint.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 12, lineCap: .round)
                         )
-                        .frame(width: 250, height: 250)
+                        .frame(width: 260, height: 260)
                         .rotationEffect(.degrees(-90))
                         .animation(.easeInOut(duration: 0.5), value: timerManager.progress)
                     
-                    // Clean time display
+                    // Time display
                     VStack(spacing: 8) {
                         Text(timerManager.formattedTime)
-                            .font(.system(size: 44, weight: .thin, design: .monospaced))
+                            .font(.system(size: 48, weight: .ultraLight, design: .monospaced))
                             .foregroundColor(.primary)
                         
                         Text(timerManager.isFocusMode ? "Focus" : "Break")
                             .font(.callout)
                             .foregroundColor(.secondary)
                             .fontWeight(.medium)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                
-                Spacer()
-                
-                // Enhanced tomato button - centered
-                VStack(spacing: 12) {
-                    TomatoButton(timerManager: timerManager)
-                    
-                    // Helper text under button
-                    if !timerManager.isRunning {
-                        Text("Press me to start \(timerManager.isFocusMode ? "focus" : "break") mode")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .animation(.easeInOut(duration: 0.3), value: timerManager.isFocusMode)
-                    } else {
-                        Text("Press me to pause and exit \(timerManager.isFocusMode ? "focus" : "break") mode")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .animation(.easeInOut(duration: 0.3), value: timerManager.isFocusMode)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                
-                Spacer()
-                
-                // Control buttons - centered
-                HStack(spacing: 25) {
-                    // Reset button
-                    Button(action: {
-                        timerManager.resetTimer()
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.title2)
-                            .foregroundColor(timerManager.isRunning ? .gray : .primary)
-                            .frame(width: 50, height: 50)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
                             .background(
-                                Circle()
-                                    .fill(Color.gray.opacity(0.2))
-                                    .opacity(timerManager.isRunning ? 0.5 : 1.0)
+                                Capsule()
+                                    .fill(Color(.systemGray6))
                             )
                     }
-                    .disabled(timerManager.isRunning)
+                }
+                .frame(maxWidth: .infinity)
+                .onTapGesture {
+                    if !timerManager.isRunning {
+                        timerManager.startTimer()
+                    }
+                }
+                
+                // Modern control buttons
+                HStack(spacing: 30) {
+                    // Reset button
+                    ControlButton(
+                        icon: "arrow.clockwise",
+                        action: { timerManager.resetTimer() },
+                        disabled: timerManager.isRunning,
+                        color: .gray
+                    )
                     
                     // Skip/Mode Switch button
-                    Button(action: {
-                        if timerManager.isRunning && timerManager.isFocusMode {
-                            // Show confirmation dialog for focus mode
-                            timerManager.generateRandomMotivationalQuote()
-                            showingSkipConfirmation = true
-                        } else {
-                            timerManager.switchMode()
-                        }
-                    }) {
-                        Image(systemName: "forward.fill")
-                            .font(.title2)
-                            .foregroundColor(.primary)
-                            .frame(width: 50, height: 50)
-                            .background(
-                                Circle()
-                                    .fill(Color.gray.opacity(0.2))
-                            )
-                    }
+                    ControlButton(
+                        icon: "forward.fill",
+                        action: {
+                            if timerManager.isRunning && timerManager.isFocusMode {
+                                timerManager.generateRandomMotivationalQuote()
+                                showingSkipConfirmation = true
+                            } else {
+                                timerManager.switchMode()
+                            }
+                        },
+                        disabled: false,
+                        color: .blue
+                    )
                     
                     // Leaderboard button
-                    Button(action: {
-                        showingLeaderboard = true
-                    }) {
-                        Image(systemName: "trophy")
-                            .font(.title2)
-                            .foregroundColor(timerManager.isRunning ? .gray : .primary)
-                            .frame(width: 50, height: 50)
-                            .background(
-                                Circle()
-                                    .fill(Color.gray.opacity(0.2))
-                                    .opacity(timerManager.isRunning ? 0.5 : 1.0)
-                            )
-                    }
-                    .disabled(timerManager.isRunning)
+                    ControlButton(
+                        icon: "trophy.fill",
+                        action: { showingLeaderboard = true },
+                        disabled: timerManager.isRunning,
+                        color: .yellow
+                    )
                     
                     // Settings button
-                    Button(action: {
-                        showingSettings = true
-                    }) {
-                        Image(systemName: "gearshape")
-                            .font(.title2)
-                            .foregroundColor(timerManager.isRunning ? .gray : .primary)
-                            .frame(width: 50, height: 50)
-                            .background(
-                                Circle()
-                                    .fill(Color.gray.opacity(0.2))
-                                    .opacity(timerManager.isRunning ? 0.5 : 1.0)
-                            )
-                    }
-                    .disabled(timerManager.isRunning)
+                    ControlButton(
+                        icon: "gearshape.fill",
+                        action: { showingSettings = true },
+                        disabled: timerManager.isRunning,
+                        color: .purple
+                    )
                 }
                 .frame(maxWidth: .infinity)
                 
@@ -307,7 +362,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.vertical, 20)
             
-            // Bottom status area - centered
+            // Bottom status area
             VStack {
                 if timerManager.isLocked {
                     HStack(spacing: 8) {
@@ -324,14 +379,18 @@ struct ContentView: View {
                     .background(
                         Capsule()
                             .fill(Color.red.opacity(0.1))
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                            )
                     )
+                    .animation(.easeInOut(duration: 0.3), value: timerManager.isLocked)
                 }
             }
             .frame(height: 40)
             .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 30)
     }
     
     private func fullScreenTimerView(geometry: GeometryProxy) -> some View {
@@ -363,7 +422,7 @@ struct ContentView: View {
                         .opacity(timerManager.isRunning ? 1 : 0)
                         .animation(.easeInOut(duration: 1.0).delay(0.8), value: timerManager.isRunning)
                     
-                    // Emoji with timer ring border - perfectly centered
+                    // Emoji with timer ring border
                     ZStack {
                         // Timer progress ring around the emoji
                         Circle()
@@ -398,14 +457,12 @@ struct ContentView: View {
                             }
                             .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity) { isPressing in
                                 emojiHovered = isPressing
-                            } perform: {
-                                // This won't be called since minimumDuration is 0
-                            }
+                            } perform: {}
                     }
                     
                     // Helper text under emoji when running
                     if timerManager.isRunning {
-                        Text("Press me to pause and exit \(timerManager.isFocusMode ? "focus" : "break") mode")
+                        Text("Tap emoji to pause and exit \(timerManager.isFocusMode ? "focus" : "break") mode")
                             .font(.caption)
                             .foregroundColor(.white.opacity(0.8))
                             .multilineTextAlignment(.center)
@@ -434,66 +491,31 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             
-            // Floating control buttons - only visible when timer is running
+            // Floating control buttons
             VStack {
                 Spacer()
                 
                 HStack(spacing: 60) {
-                    // Restart/Redo button
-                    Button(action: {
-                        timerManager.restartCurrentTimer()
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                            
-                            Text("Restart")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-                        .frame(width: 70, height: 50)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.black.opacity(0.3))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                )
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
+                    // Restart button
+                    FloatingButton(
+                        icon: "arrow.clockwise",
+                        label: "Restart",
+                        action: { timerManager.restartCurrentTimer() }
+                    )
                     
                     // Skip button
-                    Button(action: {
-                        if timerManager.isFocusMode {
-                            // Show confirmation dialog for focus mode
-                            timerManager.generateRandomMotivationalQuote()
-                            showingSkipConfirmation = true
-                        } else {
-                            timerManager.skipTimer()
+                    FloatingButton(
+                        icon: "forward.fill",
+                        label: "Skip",
+                        action: {
+                            if timerManager.isFocusMode {
+                                timerManager.generateRandomMotivationalQuote()
+                                showingSkipConfirmation = true
+                            } else {
+                                timerManager.skipTimer()
+                            }
                         }
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "forward.fill")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                            
-                            Text("Skip")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-                        .frame(width: 70, height: 50)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.black.opacity(0.3))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                )
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
+                    )
                 }
                 .opacity(timerManager.isRunning ? 1 : 0)
                 .animation(.easeInOut(duration: 1.0).delay(1.4), value: timerManager.isRunning)
@@ -502,6 +524,95 @@ struct ContentView: View {
         }
     }
 }
+
+// MARK: - Custom UI Components
+
+struct QuickStatCard: View {
+    let icon: String
+    let value: String
+    let label: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+            
+            Text(label)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        )
+    }
+}
+
+struct ControlButton: View {
+    let icon: String
+    let action: () -> Void
+    let disabled: Bool
+    let color: Color
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(disabled ? .gray : .white)
+                .frame(width: 50, height: 50)
+                .background(
+                    Circle()
+                        .fill(disabled ? Color.gray.opacity(0.3) : color)
+                        .shadow(color: disabled ? .clear : color.opacity(0.3), radius: 8, x: 0, y: 4)
+                )
+        }
+        .disabled(disabled)
+        .scaleEffect(disabled ? 0.9 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: disabled)
+    }
+}
+
+struct FloatingButton: View {
+    let icon: String
+    let label: String
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundColor(.white)
+                
+                Text(label)
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.9))
+            }
+            .frame(width: 80, height: 60)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// Keep existing StatsView, WelcomeView, and WelcomeStep structs...
 
 struct WelcomeView: View {
     @Binding var showingWelcome: Bool
@@ -616,6 +727,51 @@ struct WelcomeStep {
     let emoji: String
     let title: String
     let description: String
+}
+
+struct AppLockOverlay: View {
+    @ObservedObject var appLockManager: AppLockManager
+    
+    var body: some View {
+        ZStack {
+            // Semi-transparent overlay
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 30) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 50))
+                    .foregroundColor(.orange)
+                
+                VStack(spacing: 16) {
+                    Text("Focus Session Active")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Text("You left during a focus session. Return to your timer to stay on track!")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
+                
+                Button("Return to Focus") {
+                    appLockManager.showingUnlockAlert = false
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.orange)
+                )
+                .padding(.horizontal, 40)
+            }
+        }
+    }
 }
 
 #Preview {

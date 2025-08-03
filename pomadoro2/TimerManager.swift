@@ -9,6 +9,7 @@ import Foundation
 import SwiftUI
 import UserNotifications
 import AudioToolbox
+import Combine
 
 class TimerManager: ObservableObject {
     @Published var isRunning = false
@@ -26,12 +27,19 @@ class TimerManager: ObservableObject {
     @Published var focusEmoji = "🍅"
     @Published var breakEmoji = "😌"
     
-    // Leaderboard integration
-    @Published var leaderboardManager = LeaderboardManager()
+    // Local stats tracking
+    @Published var todayFocusMinutes: Int = 0
+    @Published var totalFocusMinutes: Int = 0
+    @Published var currentStreak: Int = 0
     @Published var lastCompletionDate: Date?
-    private let userDefaults = UserDefaults.standard
     
+    // Firebase integration
+    private let firebaseManager = FirebaseManager()
+    // App lock manager
+    let appLockManager = AppLockManager()
+    private let userDefaults = UserDefaults.standard
     private var timer: Timer?
+    private var cancellables = Set<AnyCancellable>()
     
     private let encouragingMessages = [
         "🔥 You're crushing it! Stay focused!",
@@ -94,25 +102,46 @@ class TimerManager: ObservableObject {
         selectRandomMessage()
         generateRandomMotivationalQuote()
         requestNotificationPermission()
-        
-        // Load last completion date
-        if let lastDate = userDefaults.object(forKey: "lastCompletionDate") as? Date {
-            lastCompletionDate = lastDate
-        }
+        loadLocalStats()
+        setupFirebase()
     }
     
     var currentEmoji: String {
         return isFocusMode ? focusEmoji : breakEmoji
     }
     
+    var firebaseManagerPublished: FirebaseManager {
+        return firebaseManager
+    }
+    
+    private func setupFirebase() {
+        // Auto sign-in anonymously if not authenticated
+        if !firebaseManager.isAuthenticated {
+            firebaseManager.signInAnonymously()
+        }
+        
+        // Load stats from Firebase when authenticated
+        firebaseManager.$isAuthenticated
+            .sink { [weak self] isAuthenticated in
+                if isAuthenticated {
+                    self?.syncWithFirebase()
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
     func startTimer() {
-        // Invalidate any existing timer first
         timer?.invalidate()
         timer = nil
         
         isRunning = true
         isLocked = true
-        selectRandomMessage() // Get a new encouraging message
+        selectRandomMessage()
+        
+        // Lock app only during focus mode
+        if isFocusMode {
+            appLockManager.lockApp()
+        }
         
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
@@ -131,10 +160,12 @@ class TimerManager: ObservableObject {
         isLocked = false
         timer?.invalidate()
         timer = nil
+        
+        // Unlock app when pausing
+        appLockManager.unlockApp()
     }
     
     func restartCurrentTimer() {
-        // Reset the current timer to its full duration and restart
         pauseTimer()
         timeRemaining = isFocusMode ? focusDuration : breakDuration
         startTimer()
@@ -152,13 +183,11 @@ class TimerManager: ObservableObject {
     
     func skipTimer() {
         if isRunning {
-            // If timer is running, immediately switch to the other mode and start it
             pauseTimer()
             isFocusMode.toggle()
             timeRemaining = isFocusMode ? focusDuration : breakDuration
             startTimer()
         } else {
-            // If timer is not running, just complete normally
             timerCompleted()
         }
     }
@@ -172,48 +201,104 @@ class TimerManager: ObservableObject {
     private func timerCompleted() {
         pauseTimer()
         
-        // Show completion notification and alert
         let completedMode = isFocusMode ? "Focus" : "Break"
         let nextMode = isFocusMode ? "Break" : "Focus"
         
         completionMessage = "\(completedMode) session complete! Time for a \(nextMode.lowercased()) 🎉"
         showingCompletionAlert = true
         
-        // Play system sound
-        AudioServicesPlaySystemSound(1005) // System notification sound
-        
-        // Send local notification
+        AudioServicesPlaySystemSound(1005)
         sendCompletionNotification(completedMode: completedMode, nextMode: nextMode)
         
-        // Update leaderboard stats if it was a focus session
+        // Unlock app when session completes
+        appLockManager.unlockApp()
+        
+        // Update stats if it was a focus session
         if isFocusMode {
             let focusMinutes = Int(focusDuration / 60)
-            let isNewDay = checkIfNewDay()
+            updateStats(focusMinutesCompleted: focusMinutes)
             
-            leaderboardManager.updateUserStats(
-                focusMinutesCompleted: focusMinutes,
-                isNewDay: isNewDay
-            )
-            
-            // Update last completion date
-            lastCompletionDate = Date()
-            userDefaults.set(lastCompletionDate, forKey: "lastCompletionDate")
+            // Log session to Firebase
+            firebaseManager.logFocusSession(duration: focusMinutes)
         }
         
         if isFocusMode {
-            // Switch to break mode
             isFocusMode = false
             timeRemaining = breakDuration
         } else {
-            // Switch to focus mode
             isFocusMode = true
             timeRemaining = focusDuration
         }
     }
     
+    private func loadLocalStats() {
+        todayFocusMinutes = userDefaults.integer(forKey: "todayFocusMinutes")
+        totalFocusMinutes = userDefaults.integer(forKey: "totalFocusMinutes")
+        currentStreak = userDefaults.integer(forKey: "currentStreak")
+        
+        if let lastDate = userDefaults.object(forKey: "lastCompletionDate") as? Date {
+            lastCompletionDate = lastDate
+        }
+        
+        // Reset today's minutes if it's a new day
+        if checkIfNewDay() {
+            todayFocusMinutes = 0
+            userDefaults.set(todayFocusMinutes, forKey: "todayFocusMinutes")
+        }
+    }
+    
+    private func updateStats(focusMinutesCompleted: Int) {
+        let isNewDay = checkIfNewDay()
+        
+        if isNewDay {
+            todayFocusMinutes = focusMinutesCompleted
+            currentStreak += 1
+        } else {
+            todayFocusMinutes += focusMinutesCompleted
+        }
+        
+        totalFocusMinutes += focusMinutesCompleted
+        lastCompletionDate = Date()
+        
+        // Save locally
+        saveLocalStats()
+        
+        // Save to Firebase
+        syncWithFirebase()
+    }
+    
+    private func saveLocalStats() {
+        userDefaults.set(todayFocusMinutes, forKey: "todayFocusMinutes")
+        userDefaults.set(totalFocusMinutes, forKey: "totalFocusMinutes")
+        userDefaults.set(currentStreak, forKey: "currentStreak")
+        userDefaults.set(lastCompletionDate, forKey: "lastCompletionDate")
+    }
+    
+    private func syncWithFirebase() {
+        // Save current stats to Firebase
+        firebaseManager.saveUserStats(
+            focusMinutes: todayFocusMinutes,
+            totalMinutes: totalFocusMinutes,
+            streak: currentStreak
+        )
+        
+        // Load stats from Firebase (in case user has data from other devices)
+        firebaseManager.loadUserStats { [weak self] todayMinutes, totalMinutes, streak in
+            DispatchQueue.main.async {
+                // Use the maximum values to handle multi-device sync
+                self?.todayFocusMinutes = max(self?.todayFocusMinutes ?? 0, todayMinutes)
+                self?.totalFocusMinutes = max(self?.totalFocusMinutes ?? 0, totalMinutes)
+                self?.currentStreak = max(self?.currentStreak ?? 0, streak)
+                
+                // Save the updated values locally
+                self?.saveLocalStats()
+            }
+        }
+    }
+    
     private func checkIfNewDay() -> Bool {
         guard let lastDate = lastCompletionDate else {
-            return true // First completion ever
+            return true
         }
         
         let calendar = Calendar.current
@@ -260,7 +345,6 @@ class TimerManager: ObservableObject {
         self.focusEmoji = focusEmoji.isEmpty ? "🍅" : focusEmoji
         self.breakEmoji = breakEmoji.isEmpty ? "😌" : breakEmoji
         
-        // Update current timer if not running
         if !isRunning {
             timeRemaining = isFocusMode ? focusDuration : breakDuration
         }
