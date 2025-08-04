@@ -36,7 +36,6 @@ class TimerManager: ObservableObject {
     // Firebase integration
     private let firebaseManager = FirebaseManager()
     // App lock manager
-    let appLockManager = AppLockManager()
     private let userDefaults = UserDefaults.standard
     private var timer: Timer?
     private var cancellables = Set<AnyCancellable>()

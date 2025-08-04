@@ -11,6 +11,7 @@ import Foundation
 struct ContentView: View {
     @StateObject private var timerManager = TimerManager()
     @State private var showingSettings = false
+    @State private var showDebugPanel = false
     @State private var showingWelcome = true
     @State private var showingStats = false
     @State private var showingLeaderboard = false
@@ -92,6 +93,131 @@ struct ContentView: View {
                 }
             }
         }
+#if DEBUG
+.overlay(
+    // Debug panel - only shows in debug builds
+    VStack {
+        if showDebugPanel {
+            ScrollView {
+                VStack(spacing: 8) {
+                    Text("🐛 DEBUG PANEL")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                    
+                    // Auth & User Info
+                    VStack(spacing: 4) {
+                        Text("AUTH STATUS")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                        
+                        HStack(spacing: 8) {
+                            Button("Check User") {
+                                timerManager.debugPrintCurrentUser()
+                            }
+                            .debugButtonStyle(.blue)
+                            
+                            Button("Timer Status") {
+                                timerManager.debugPrintTimerStatus()
+                            }
+                            .debugButtonStyle(.cyan)
+                            
+                            Button("Sign Out") {
+                                timerManager.firebaseManagerPublished.signOut()
+                            }
+                            .debugButtonStyle(.orange)
+                        }
+                    }
+                    
+                    // Stats Testing
+                    VStack(spacing: 4) {
+                        Text("STATS TESTING")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                        
+                        HStack(spacing: 8) {
+                            Button("Full Session") {
+                                timerManager.debugCompleteSession()
+                            }
+                            .debugButtonStyle(.green)
+                            
+                            Button("Partial Session") {
+                                timerManager.debugCompletePartialSession()
+                            }
+                            .debugButtonStyle(.mint)
+                            
+                            Button("+5 Min") {
+                                timerManager.debugAdd5Minutes()
+                            }
+                            .debugButtonStyle(.teal)
+                        }
+                        
+                        HStack(spacing: 8) {
+                            Button("Reset Stats") {
+                                timerManager.debugResetStats()
+                            }
+                            .debugButtonStyle(.red)
+                        }
+                    }
+                    
+                    // Leaderboard Testing
+                    VStack(spacing: 4) {
+                        Text("LEADERBOARD TESTING")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                        
+                        HStack(spacing: 8) {
+                            Button("Create Test Data") {
+                                timerManager.createTestLeaderboardData()
+                            }
+                            .debugButtonStyle(.purple)
+                            
+                            Button("Clear Test Data") {
+                                timerManager.clearTestData()
+                            }
+                            .debugButtonStyle(.gray)
+                        }
+                    }
+                    
+                    // Current Stats Display
+                    VStack(spacing: 2) {
+                        Text("CURRENT STATS")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                        
+                        Text("Today: \(timerManager.todayFocusMinutes) | Total: \(timerManager.totalFocusMinutes) | Streak: \(timerManager.currentStreak)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        
+                        Text("Auth: \(timerManager.firebaseManagerPublished.isAuthenticated ? "✅" : "❌") | Online: \(timerManager.firebaseManagerPublished.isOnline ? "🟢" : "🔴")")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(8)
+            }
+            .frame(maxHeight: 200)
+            .background(Color.black.opacity(0.8))
+            .foregroundColor(.white)
+            .cornerRadius(8)
+            .padding()
+        }
+        
+        Spacer()
+        
+        HStack {
+            Spacer()
+            Button(action: {
+                showDebugPanel.toggle()
+            }) {
+                Text("🐛")
+                    .font(.title2)
+            }
+            .padding()
+        }
+    }
+)
+#endif
+
     }
     
     private var dynamicColorBackground: some View {
@@ -773,7 +899,20 @@ struct AppLockOverlay: View {
         }
     }
 }
-
+// Add this extension for consistent button styling
+#if DEBUG
+extension View {
+    func debugButtonStyle(_ color: Color) -> some View {
+        self
+            .font(.caption2)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(color)
+            .foregroundColor(.white)
+            .cornerRadius(4)
+    }
+}
+#endif
 #Preview {
     ContentView()
 }

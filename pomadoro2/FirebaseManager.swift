@@ -9,32 +9,62 @@ import Foundation
 import Firebase
 import FirebaseAuth
 import FirebaseFirestore
+import Network
 
 class FirebaseManager: ObservableObject {
     @Published var isAuthenticated = false
     @Published var currentUser: User?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var isOnline = true
     
     private let db = Firestore.firestore()
     private let auth = Auth.auth()
+    private let networkMonitor = NWPathMonitor()
+    private let networkQueue = DispatchQueue(label: "NetworkMonitor")
+    private var authStateHandle: AuthStateDidChangeListenerHandle?
     
     init() {
+        setupNetworkMonitoring()
         checkAuthStatus()
+    }
+    
+    // MARK: - Network Monitoring
+    
+    private func setupNetworkMonitoring() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                self?.isOnline = path.status == .satisfied
+                if path.status == .satisfied {
+                    print("Network connection restored")
+                } else {
+                    print("Network connection lost")
+                }
+            }
+        }
+        networkMonitor.start(queue: networkQueue)
     }
     
     // MARK: - Authentication
     
     func checkAuthStatus() {
-        auth.addStateDidChangeListener { [weak self] _, user in
+        authStateHandle = auth.addStateDidChangeListener { [weak self] _, user in
             DispatchQueue.main.async {
                 self?.currentUser = user
                 self?.isAuthenticated = user != nil
+                if user != nil {
+                    print("User authenticated: \(user?.uid ?? "unknown")")
+                }
             }
         }
     }
     
     func signInAnonymously() {
+        guard isOnline else {
+            errorMessage = "No internet connection. Please check your network and try again."
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         
@@ -43,10 +73,11 @@ class FirebaseManager: ObservableObject {
                 self?.isLoading = false
                 
                 if let error = error {
-                    self?.errorMessage = error.localizedDescription
+                    self?.errorMessage = self?.friendlyErrorMessage(for: error) ?? error.localizedDescription
                     print("Anonymous sign-in error: \(error)")
                 } else {
                     print("Anonymous sign-in successful")
+                    self?.errorMessage = nil
                 }
             }
         }
@@ -55,8 +86,9 @@ class FirebaseManager: ObservableObject {
     func signOut() {
         do {
             try auth.signOut()
+            errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = friendlyErrorMessage(for: error)
         }
     }
     
@@ -65,6 +97,11 @@ class FirebaseManager: ObservableObject {
     func saveUserStats(focusMinutes: Int, totalMinutes: Int, streak: Int) {
         guard let userId = currentUser?.uid else {
             print("No authenticated user")
+            return
+        }
+        
+        guard isOnline else {
+            print("Offline - stats will sync when connection is restored")
             return
         }
         
@@ -89,6 +126,12 @@ class FirebaseManager: ObservableObject {
     func loadUserStats(completion: @escaping (Int, Int, Int) -> Void) {
         guard let userId = currentUser?.uid else {
             print("No authenticated user")
+            completion(0, 0, 0)
+            return
+        }
+        
+        guard isOnline else {
+            print("Offline - using local stats")
             completion(0, 0, 0)
             return
         }
@@ -120,6 +163,12 @@ class FirebaseManager: ObservableObject {
     // MARK: - Leaderboard
     
     func getLeaderboard(limit: Int = 10, completion: @escaping ([LeaderboardEntry]) -> Void) {
+        guard isOnline else {
+            print("Offline - cannot load leaderboard")
+            completion([])
+            return
+        }
+        
         db.collection("userStats")
             .order(by: "totalFocusMinutes", descending: true)
             .limit(to: limit)
@@ -154,6 +203,11 @@ class FirebaseManager: ObservableObject {
             return
         }
         
+        guard isOnline else {
+            print("Offline - session will be logged when connection is restored")
+            return
+        }
+        
         let sessionData: [String: Any] = [
             "userId": userId,
             "duration": duration,
@@ -167,6 +221,36 @@ class FirebaseManager: ObservableObject {
             } else {
                 print("Focus session logged successfully")
             }
+        }
+    }
+    
+    // MARK: - Error Handling
+    
+    private func friendlyErrorMessage(for error: Error) -> String {
+        if let authError = error as? AuthErrorCode {
+            switch authError.code {
+            case .networkError:
+                return "Network connection problem. Please check your internet and try again."
+            case .tooManyRequests:
+                return "Too many attempts. Please wait a moment and try again."
+            case .userDisabled:
+                return "This account has been disabled."
+            default:
+                return "Authentication failed. Please try again."
+            }
+        }
+        
+        if error.localizedDescription.contains("network") {
+            return "Network connection problem. Please check your internet and try again."
+        }
+        
+        return error.localizedDescription
+    }
+    
+    deinit {
+        networkMonitor.cancel()
+        if let handle = authStateHandle {
+            auth.removeStateDidChangeListener(handle)
         }
     }
 }

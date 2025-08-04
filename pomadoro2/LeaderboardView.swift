@@ -162,7 +162,7 @@ struct LeaderboardView: View {
                 loadLeaderboard()
             }
         }
-        .onChange(of: firebaseManager.isAuthenticated) { isAuthenticated in
+        .onChange(of: firebaseManager.isAuthenticated) { _, isAuthenticated in
             if isAuthenticated {
                 loadLeaderboard()
             }
