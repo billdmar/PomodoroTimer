@@ -35,7 +35,6 @@ class TimerManager: ObservableObject {
     
     // Firebase integration
     private let firebaseManager = FirebaseManager()
-    // App lock manager
     private let userDefaults = UserDefaults.standard
     private var timer: Timer?
     private var cancellables = Set<AnyCancellable>()
@@ -137,11 +136,6 @@ class TimerManager: ObservableObject {
         isLocked = true
         selectRandomMessage()
         
-        // Lock app only during focus mode
-        if isFocusMode {
-            appLockManager.lockApp()
-        }
-        
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -159,9 +153,6 @@ class TimerManager: ObservableObject {
         isLocked = false
         timer?.invalidate()
         timer = nil
-        
-        // Unlock app when pausing
-        appLockManager.unlockApp()
     }
     
     func restartCurrentTimer() {
@@ -208,9 +199,6 @@ class TimerManager: ObservableObject {
         
         AudioServicesPlaySystemSound(1005)
         sendCompletionNotification(completedMode: completedMode, nextMode: nextMode)
-        
-        // Unlock app when session completes
-        appLockManager.unlockApp()
         
         // Update stats if it was a focus session
         if isFocusMode {
@@ -359,4 +347,73 @@ class TimerManager: ObservableObject {
         let totalTime = isFocusMode ? focusDuration : breakDuration
         return 1 - (timeRemaining / totalTime)
     }
+
+    // MARK: - Debug Methods
+    #if DEBUG
+    func debugPrintCurrentUser() {
+        print("🐛 DEBUG: Current user: \(firebaseManager.currentUser?.uid ?? "None")")
+        print("🐛 DEBUG: Is authenticated: \(firebaseManager.isAuthenticated)")
+        print("🐛 DEBUG: Is online: \(firebaseManager.isOnline)")
+    }
+    
+    func debugPrintTimerStatus() {
+        print("🐛 DEBUG: Timer running: \(isRunning)")
+        print("🐛 DEBUG: Focus mode: \(isFocusMode)")
+        print("🐛 DEBUG: Time remaining: \(formattedTime)")
+    }
+    
+    func debugCompleteSession() {
+        let focusMinutes = Int(focusDuration / 60)
+        updateStats(focusMinutesCompleted: focusMinutes)
+        firebaseManager.logFocusSession(duration: focusMinutes)
+        print("🐛 DEBUG: Added full session (\(focusMinutes) minutes)")
+    }
+    
+    func debugCompletePartialSession() {
+        // Calculate how much time was actually spent (total duration - remaining time)
+        let totalDuration = isFocusMode ? focusDuration : breakDuration
+        let timeSpent = totalDuration - timeRemaining
+        let partialMinutes = max(1, Int(timeSpent / 60)) // At least 1 minute, rounded down
+        
+        if isFocusMode {
+            updateStats(focusMinutesCompleted: partialMinutes)
+            firebaseManager.logFocusSession(duration: partialMinutes)
+            print("🐛 DEBUG: Added partial focus session (\(partialMinutes) minutes of \(Int(totalDuration / 60)) total)")
+        } else {
+            print("🐛 DEBUG: Cannot add partial session - currently in break mode")
+        }
+    }
+    
+    func debugAdd5Minutes() {
+        updateStats(focusMinutesCompleted: 5)
+        firebaseManager.logFocusSession(duration: 5)
+        print("🐛 DEBUG: Added 5 minutes")
+    }
+    
+    func debugResetStats() {
+        todayFocusMinutes = 0
+        totalFocusMinutes = 0
+        currentStreak = 0
+        lastCompletionDate = nil
+        saveLocalStats()
+        syncWithFirebase()
+        print("🐛 DEBUG: Stats reset")
+    }
+    
+    func createTestLeaderboardData() {
+        // Create some test sessions
+        for i in 1...10 {
+            firebaseManager.logFocusSession(duration: 25 * i, completedAt: Date().addingTimeInterval(-Double(i * 3600)))
+        }
+        
+        // Update current user stats
+        updateStats(focusMinutesCompleted: 250)
+        print("🐛 DEBUG: Created test leaderboard data")
+    }
+    
+    func clearTestData() {
+        debugResetStats()
+        print("🐛 DEBUG: Cleared test data")
+    }
+    #endif
 }

@@ -46,11 +46,6 @@ struct ContentView: View {
                         mainTimerView
                     }
                 }
-                
-                // App lock overlay - only show when trying to leave app, not during normal use
-                if timerManager.appLockManager.isAppLocked && timerManager.appLockManager.showingUnlockAlert {
-                    AppLockOverlay(appLockManager: timerManager.appLockManager)
-                }
             }
         }
         .sheet(isPresented: $showingSettings) {
@@ -738,8 +733,6 @@ struct FloatingButton: View {
     }
 }
 
-// Keep existing StatsView, WelcomeView, and WelcomeStep structs...
-
 struct WelcomeView: View {
     @Binding var showingWelcome: Bool
     @State private var currentStep = 0
@@ -855,50 +848,6 @@ struct WelcomeStep {
     let description: String
 }
 
-struct AppLockOverlay: View {
-    @ObservedObject var appLockManager: AppLockManager
-    
-    var body: some View {
-        ZStack {
-            // Semi-transparent overlay
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .ignoresSafeArea()
-            
-            VStack(spacing: 30) {
-                Image(systemName: "lock.shield.fill")
-                    .font(.system(size: 50))
-                    .foregroundColor(.orange)
-                
-                VStack(spacing: 16) {
-                    Text("Focus Session Active")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                    
-                    Text("You left during a focus session. Return to your timer to stay on track!")
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-                }
-                
-                Button("Return to Focus") {
-                    appLockManager.showingUnlockAlert = false
-                }
-                .font(.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.orange)
-                )
-                .padding(.horizontal, 40)
-            }
-        }
-    }
-}
 // Add this extension for consistent button styling
 #if DEBUG
 extension View {
@@ -913,6 +862,7 @@ extension View {
     }
 }
 #endif
+
 #Preview {
     ContentView()
 }
