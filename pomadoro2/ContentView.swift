@@ -12,12 +12,15 @@ struct ContentView: View {
     @StateObject private var timerManager = TimerManager()
     @State private var showingSettings = false
     @State private var showDebugPanel = false
-    @State private var showingWelcome = true
+    @State private var showingWelcome = false // Default to false now
     @State private var showingStats = false
     @State private var showingLeaderboard = false
     @State private var colorShift: CGFloat = 0
     @State private var emojiHovered = false
     @State private var showingSkipConfirmation = false
+    
+    // UserDefaults to track first launch
+    @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -46,6 +49,18 @@ struct ContentView: View {
                         mainTimerView
                     }
                 }
+                
+                // App lock overlay - only show when trying to leave app, not during normal use
+                if timerManager.appLockManager.isAppLocked && timerManager.appLockManager.showingUnlockAlert {
+                    AppLockOverlay(appLockManager: timerManager.appLockManager)
+                }
+            }
+        }
+        .onAppear {
+            // Check if this is the first launch
+            if !hasLaunchedBefore {
+                showingWelcome = true
+                hasLaunchedBefore = true
             }
         }
         .sheet(isPresented: $showingSettings) {
@@ -98,6 +113,25 @@ struct ContentView: View {
                     Text("🐛 DEBUG PANEL")
                         .font(.caption)
                         .fontWeight(.bold)
+                    
+                    // Debug controls for welcome screen
+                    VStack(spacing: 4) {
+                        Text("WELCOME SCREEN")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                        
+                        HStack(spacing: 8) {
+                            Button("Show Welcome") {
+                                showingWelcome = true
+                            }
+                            .debugButtonStyle(.green)
+                            
+                            Button("Reset First Launch") {
+                                hasLaunchedBefore = false
+                            }
+                            .debugButtonStyle(.orange)
+                        }
+                    }
                     
                     // Auth & User Info
                     VStack(spacing: 4) {
@@ -190,7 +224,7 @@ struct ContentView: View {
                 }
                 .padding(8)
             }
-            .frame(maxHeight: 200)
+            .frame(maxHeight: 250)
             .background(Color.black.opacity(0.8))
             .foregroundColor(.white)
             .cornerRadius(8)
@@ -303,6 +337,22 @@ struct ContentView: View {
                 }
                 
                 Spacer()
+                
+                // Help button for returning users
+                Button(action: {
+                    showingWelcome = true
+                }) {
+                    Image(systemName: "questionmark.circle")
+                        .font(.title2)
+                        .foregroundColor(timerManager.isRunning ? .gray : .secondary)
+                        .frame(width: 44, height: 44)
+                        .background(
+                            Circle()
+                                .fill(Color(.systemGray5))
+                                .opacity(timerManager.isRunning ? 0.5 : 1.0)
+                        )
+                }
+                .disabled(timerManager.isRunning)
                 
                 // Stats button in top right
                 Button(action: {
@@ -741,27 +791,47 @@ struct WelcomeView: View {
         WelcomeStep(
             emoji: "🍅",
             title: "Welcome to Pomodoro Timer",
-            description: "Boost your productivity with the time-tested Pomodoro Technique!"
+            description: "Boost your productivity with the time-tested Pomodoro Technique! This app helps you focus better and track your progress."
         ),
         WelcomeStep(
             emoji: "🕐",
-            title: "The Method",
-            description: "Work for 25 minutes, then take a 5-minute break. This simple rhythm helps maintain focus and prevents burnout."
+            title: "The Pomodoro Method",
+            description: "Work for 25 minutes (Focus Time), then take a 5-minute break. This simple rhythm helps maintain focus and prevents burnout. You can customize these durations in Settings."
         ),
         WelcomeStep(
-            emoji: "🧠",
-            title: "The Science",
-            description: "Created by Francesco Cirillo in the 1980s, this technique leverages your brain's natural attention cycles for maximum productivity."
+            emoji: "🎯",
+            title: "How to Use the Timer",
+            description: "Tap the large timer circle to start a session. During focus time, the app locks to keep you on track. Tap the emoji during a session to pause and exit."
+        ),
+        WelcomeStep(
+            emoji: "📊",
+            title: "Track Your Progress",
+            description: "View your daily focus minutes, streak counter, and total time. Access detailed stats and achievements by tapping the calendar icon."
+        ),
+        WelcomeStep(
+            emoji: "🏆",
+            title: "Compete Globally",
+            description: "Join the leaderboard to see how you compare with other users worldwide. Sign in anonymously to participate and earn achievements."
+        ),
+        WelcomeStep(
+            emoji: "⚙️",
+            title: "Customize Your Experience",
+            description: "Change timer durations, pick custom emojis for focus and break time, and adjust settings to match your workflow preferences."
+        ),
+        WelcomeStep(
+            emoji: "🔒",
+            title: "Stay Focused",
+            description: "During focus sessions, the app prevents distractions by locking the screen and sending motivational notifications if you leave."
         ),
         WelcomeStep(
             emoji: "🚀",
             title: "Ready to Focus?",
-            description: "Tap the tomato to start your first Pomodoro session. Your productive journey begins now!"
+            description: "You're all set! Tap the timer to start your first Pomodoro session. Build streaks, earn achievements, and boost your productivity!"
         )
     ]
     
     var body: some View {
-        VStack(spacing: 40) {
+        VStack(spacing: 30) {
             Spacer()
             
             // Progress dots
@@ -786,7 +856,7 @@ struct WelcomeView: View {
                 
                 VStack(spacing: 16) {
                     Text(welcomeSteps[currentStep].title)
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
                         .foregroundColor(.primary)
                         .multilineTextAlignment(.center)
                     
@@ -815,29 +885,49 @@ struct WelcomeView: View {
                 
                 Spacer()
                 
-                Button(currentStep == welcomeSteps.count - 1 ? "Get Started!" : "Next") {
-                    if currentStep == welcomeSteps.count - 1 {
-                        withAnimation(.easeInOut(duration: 0.5)) {
-                            showingWelcome = false
-                        }
-                    } else {
+                if currentStep < welcomeSteps.count - 1 {
+                    Button("Next") {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             currentStep += 1
                         }
                     }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 30)
+                    .padding(.vertical, 12)
+                    .background(
+                        Capsule()
+                            .fill(Color.red)
+                    )
+                } else {
+                    Button("Get Started!") {
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            showingWelcome = false
+                        }
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 30)
+                    .padding(.vertical, 12)
+                    .background(
+                        Capsule()
+                            .fill(Color.green)
+                    )
                 }
-                .font(.headline)
-                .foregroundColor(.white)
-                .padding(.horizontal, 30)
-                .padding(.vertical, 12)
-                .background(
-                    Capsule()
-                        .fill(currentStep == welcomeSteps.count - 1 ? Color.green : Color.red)
-                )
             }
             .padding(.horizontal, 30)
             
-            Spacer().frame(height: 50)
+            // Skip button for returning users
+            Button("Skip Tour") {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showingWelcome = false
+                }
+            }
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .padding(.bottom, 10)
+            
+            Spacer().frame(height: 30)
         }
     }
 }
@@ -846,6 +936,51 @@ struct WelcomeStep {
     let emoji: String
     let title: String
     let description: String
+}
+
+struct AppLockOverlay: View {
+    @ObservedObject var appLockManager: EnhancedAppLockManager
+    
+    var body: some View {
+        ZStack {
+            // Semi-transparent overlay
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 30) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 50))
+                    .foregroundColor(.orange)
+                
+                VStack(spacing: 16) {
+                    Text("Focus Session Active")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Text("You left during a focus session. Return to your timer to stay on track!")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
+                
+                Button("Return to Focus") {
+                    appLockManager.showingUnlockAlert = false
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.orange)
+                )
+                .padding(.horizontal, 40)
+            }
+        }
+    }
 }
 
 // Add this extension for consistent button styling

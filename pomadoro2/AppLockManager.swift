@@ -1,5 +1,5 @@
 //
-//  EnhancedAppLockManager.swift
+//  AppLockManager.swift
 //  pomadoro2
 //
 //  Enhanced app lock with better user retention strategies
@@ -8,6 +8,9 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+
+// Type alias for easier reference
+typealias AppLockManager = EnhancedAppLockManager
 
 class EnhancedAppLockManager: ObservableObject {
     @Published var isAppLocked = false
