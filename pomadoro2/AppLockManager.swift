@@ -9,7 +9,7 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
-// Type alias for easier reference
+// Create a type alias to use the enhanced version
 typealias AppLockManager = EnhancedAppLockManager
 
 class EnhancedAppLockManager: ObservableObject {

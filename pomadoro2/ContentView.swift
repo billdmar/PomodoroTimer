@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  pomadoro2
 //
-//  Created by Bill Mar on 7/30/25.
+//  Enhanced with smooth transitions between timer states
 //
 
 import SwiftUI
@@ -12,55 +12,50 @@ struct ContentView: View {
     @StateObject private var timerManager = TimerManager()
     @State private var showingSettings = false
     @State private var showDebugPanel = false
-    @State private var showingWelcome = false // Default to false now
+    @State private var showingWelcome = true
     @State private var showingStats = false
     @State private var showingLeaderboard = false
     @State private var colorShift: CGFloat = 0
     @State private var emojiHovered = false
     @State private var showingSkipConfirmation = false
     
-    // UserDefaults to track first launch
-    @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
+    // Animation state for smooth transitions
+    @State private var isTransitioning = false
+    @State private var scaleEffect: CGFloat = 1.0
+    @State private var backgroundOpacity: Double = 1.0
     
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                if timerManager.isRunning {
-                    // Dynamic background
-                    dynamicColorBackground
-                    
-                    // Full screen timer view
-                    fullScreenTimerView(geometry: geometry)
+                // Background layers with smooth transitions
+                backgroundView
+                
+                // Main content with transition animations
+                if showingWelcome {
+                    WelcomeView(showingWelcome: $showingWelcome)
+                        .transition(.opacity.combined(with: .scale))
                 } else {
-                    // Clean background with subtle gradient
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(.systemBackground),
-                            Color(.systemGray6).opacity(0.3)
-                        ]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .ignoresSafeArea()
-                    
-                    if showingWelcome {
-                        WelcomeView(showingWelcome: $showingWelcome)
-                    } else {
+                    ZStack {
+                        // Main timer view (always present but can be hidden)
                         mainTimerView
+                            .opacity(timerManager.isRunning ? 0 : 1)
+                            .scaleEffect(timerManager.isRunning ? 0.95 : 1)
+                            .animation(.easeInOut(duration: 0.6), value: timerManager.isRunning)
+                        
+                        // Full screen timer view (overlays when running)
+                        if timerManager.isRunning {
+                            fullScreenTimerView(geometry: geometry)
+                                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                                .animation(.easeInOut(duration: 0.6), value: timerManager.isRunning)
+                        }
                     }
                 }
                 
                 // App lock overlay - only show when trying to leave app, not during normal use
                 if timerManager.appLockManager.isAppLocked && timerManager.appLockManager.showingUnlockAlert {
                     AppLockOverlay(appLockManager: timerManager.appLockManager)
+                        .transition(.opacity.combined(with: .scale))
                 }
-            }
-        }
-        .onAppear {
-            // Check if this is the first launch
-            if !hasLaunchedBefore {
-                showingWelcome = true
-                hasLaunchedBefore = true
             }
         }
         .sheet(isPresented: $showingSettings) {
@@ -74,7 +69,9 @@ struct ContentView: View {
         }
         .alert("Timer Complete! 🎉", isPresented: $timerManager.showingCompletionAlert) {
             Button("Start \(timerManager.isFocusMode ? "Focus" : "Break")") {
-                timerManager.startTimer()
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    timerManager.startTimer()
+                }
             }
             Button("Not Now", role: .cancel) { }
         } message: {
@@ -83,7 +80,9 @@ struct ContentView: View {
         .alert("Skip Focus Session? 🤔", isPresented: $showingSkipConfirmation) {
             Button("Keep Going!", role: .cancel) { }
             Button("Skip", role: .destructive) {
-                timerManager.skipTimer()
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    timerManager.skipTimer()
+                }
             }
         } message: {
             VStack {
@@ -103,6 +102,21 @@ struct ContentView: View {
                 }
             }
         }
+        // Animation when timer state changes
+        .onChange(of: timerManager.isRunning) { _, newValue in
+            withAnimation(.easeInOut(duration: 0.6)) {
+                isTransitioning = true
+                scaleEffect = newValue ? 1.1 : 1.0
+                backgroundOpacity = newValue ? 0.8 : 1.0
+            }
+            
+            // Reset transition state
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isTransitioning = false
+                }
+            }
+        }
 #if DEBUG
 .overlay(
     // Debug panel - only shows in debug builds
@@ -113,25 +127,6 @@ struct ContentView: View {
                     Text("🐛 DEBUG PANEL")
                         .font(.caption)
                         .fontWeight(.bold)
-                    
-                    // Debug controls for welcome screen
-                    VStack(spacing: 4) {
-                        Text("WELCOME SCREEN")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                        
-                        HStack(spacing: 8) {
-                            Button("Show Welcome") {
-                                showingWelcome = true
-                            }
-                            .debugButtonStyle(.green)
-                            
-                            Button("Reset First Launch") {
-                                hasLaunchedBefore = false
-                            }
-                            .debugButtonStyle(.orange)
-                        }
-                    }
                     
                     // Auth & User Info
                     VStack(spacing: 4) {
@@ -224,7 +219,7 @@ struct ContentView: View {
                 }
                 .padding(8)
             }
-            .frame(maxHeight: 250)
+            .frame(maxHeight: 200)
             .background(Color.black.opacity(0.8))
             .foregroundColor(.white)
             .cornerRadius(8)
@@ -246,7 +241,31 @@ struct ContentView: View {
     }
 )
 #endif
-
+    }
+    
+    // MARK: - Background View with Smooth Transitions
+    
+    private var backgroundView: some View {
+        ZStack {
+            if timerManager.isRunning {
+                // Dynamic background for running state
+                dynamicColorBackground
+                    .transition(.opacity)
+            } else {
+                // Clean background for stopped state
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(.systemBackground),
+                        Color(.systemGray6).opacity(0.3)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.8), value: timerManager.isRunning)
     }
     
     private var dynamicColorBackground: some View {
@@ -321,6 +340,8 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.8), value: timerManager.isFocusMode)
     }
     
+    // MARK: - Main Timer View
+    
     private var mainTimerView: some View {
         VStack(spacing: 0) {
             // Header with stats button in top right
@@ -337,22 +358,6 @@ struct ContentView: View {
                 }
                 
                 Spacer()
-                
-                // Help button for returning users
-                Button(action: {
-                    showingWelcome = true
-                }) {
-                    Image(systemName: "questionmark.circle")
-                        .font(.title2)
-                        .foregroundColor(timerManager.isRunning ? .gray : .secondary)
-                        .frame(width: 44, height: 44)
-                        .background(
-                            Circle()
-                                .fill(Color(.systemGray5))
-                                .opacity(timerManager.isRunning ? 0.5 : 1.0)
-                        )
-                }
-                .disabled(timerManager.isRunning)
                 
                 // Stats button in top right
                 Button(action: {
@@ -406,8 +411,9 @@ struct ContentView: View {
                 VStack(spacing: 16) {
                     Text(timerManager.currentEmoji)
                         .font(.system(size: 80))
-                        .scaleEffect(1.0)
+                        .scaleEffect(scaleEffect)
                         .animation(.spring(response: 0.5, dampingFraction: 0.7), value: timerManager.currentEmoji)
+                        .animation(.easeInOut(duration: 0.3), value: scaleEffect)
                     
                     // Helper text
                     if !timerManager.isRunning {
@@ -415,7 +421,9 @@ struct ContentView: View {
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
+                            .opacity(backgroundOpacity)
                             .animation(.easeInOut(duration: 0.3), value: timerManager.isFocusMode)
+                            .animation(.easeInOut(duration: 0.3), value: backgroundOpacity)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -436,12 +444,16 @@ struct ContentView: View {
                             )
                         )
                         .frame(width: 280, height: 280)
+                        .scaleEffect(scaleEffect)
+                        .animation(.easeInOut(duration: 0.3), value: scaleEffect)
                     
                     // Background circle with subtle shadow
                     Circle()
                         .fill(Color(.systemBackground))
                         .frame(width: 260, height: 260)
                         .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                        .scaleEffect(scaleEffect)
+                        .animation(.easeInOut(duration: 0.3), value: scaleEffect)
                     
                     // Progress circle
                     Circle()
@@ -458,13 +470,17 @@ struct ContentView: View {
                         )
                         .frame(width: 260, height: 260)
                         .rotationEffect(.degrees(-90))
+                        .scaleEffect(scaleEffect)
                         .animation(.easeInOut(duration: 0.5), value: timerManager.progress)
+                        .animation(.easeInOut(duration: 0.3), value: scaleEffect)
                     
                     // Time display
                     VStack(spacing: 8) {
                         Text(timerManager.formattedTime)
                             .font(.system(size: 48, weight: .ultraLight, design: .monospaced))
                             .foregroundColor(.primary)
+                            .opacity(backgroundOpacity)
+                            .animation(.easeInOut(duration: 0.3), value: backgroundOpacity)
                         
                         Text(timerManager.isFocusMode ? "Focus" : "Break")
                             .font(.callout)
@@ -476,12 +492,16 @@ struct ContentView: View {
                                 Capsule()
                                     .fill(Color(.systemGray6))
                             )
+                            .opacity(backgroundOpacity)
+                            .animation(.easeInOut(duration: 0.3), value: backgroundOpacity)
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .onTapGesture {
                     if !timerManager.isRunning {
-                        timerManager.startTimer()
+                        withAnimation(.easeInOut(duration: 0.6)) {
+                            timerManager.startTimer()
+                        }
                     }
                 }
                 
@@ -490,7 +510,11 @@ struct ContentView: View {
                     // Reset button
                     ControlButton(
                         icon: "arrow.clockwise",
-                        action: { timerManager.resetTimer() },
+                        action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                timerManager.resetTimer()
+                            }
+                        },
                         disabled: timerManager.isRunning,
                         color: .gray
                     )
@@ -503,7 +527,9 @@ struct ContentView: View {
                                 timerManager.generateRandomMotivationalQuote()
                                 showingSkipConfirmation = true
                             } else {
-                                timerManager.switchMode()
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    timerManager.switchMode()
+                                }
                             }
                         },
                         disabled: false,
@@ -527,6 +553,8 @@ struct ContentView: View {
                     )
                 }
                 .frame(maxWidth: .infinity)
+                .opacity(backgroundOpacity)
+                .animation(.easeInOut(duration: 0.3), value: backgroundOpacity)
                 
                 Spacer()
             }
@@ -563,6 +591,8 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+    
+    // MARK: - Full Screen Timer View
     
     private func fullScreenTimerView(geometry: GeometryProxy) -> some View {
         ZStack {
@@ -623,7 +653,9 @@ struct ContentView: View {
                             .animation(.easeInOut(duration: 1.0), value: timerManager.isRunning)
                             .onTapGesture {
                                 if timerManager.isRunning {
-                                    timerManager.pauseTimer()
+                                    withAnimation(.easeInOut(duration: 0.6)) {
+                                        timerManager.pauseTimer()
+                                    }
                                 }
                             }
                             .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity) { isPressing in
@@ -671,7 +703,11 @@ struct ContentView: View {
                     FloatingButton(
                         icon: "arrow.clockwise",
                         label: "Restart",
-                        action: { timerManager.restartCurrentTimer() }
+                        action: {
+                            withAnimation(.easeInOut(duration: 0.5)) {
+                                timerManager.restartCurrentTimer()
+                            }
+                        }
                     )
                     
                     // Skip button
@@ -683,7 +719,9 @@ struct ContentView: View {
                                 timerManager.generateRandomMotivationalQuote()
                                 showingSkipConfirmation = true
                             } else {
-                                timerManager.skipTimer()
+                                withAnimation(.easeInOut(duration: 0.5)) {
+                                    timerManager.skipTimer()
+                                }
                             }
                         }
                     )
@@ -791,47 +829,27 @@ struct WelcomeView: View {
         WelcomeStep(
             emoji: "🍅",
             title: "Welcome to Pomodoro Timer",
-            description: "Boost your productivity with the time-tested Pomodoro Technique! This app helps you focus better and track your progress."
+            description: "Boost your productivity with the time-tested Pomodoro Technique!"
         ),
         WelcomeStep(
             emoji: "🕐",
-            title: "The Pomodoro Method",
-            description: "Work for 25 minutes (Focus Time), then take a 5-minute break. This simple rhythm helps maintain focus and prevents burnout. You can customize these durations in Settings."
+            title: "The Method",
+            description: "Work for 25 minutes, then take a 5-minute break. This simple rhythm helps maintain focus and prevents burnout."
         ),
         WelcomeStep(
-            emoji: "🎯",
-            title: "How to Use the Timer",
-            description: "Tap the large timer circle to start a session. During focus time, the app locks to keep you on track. Tap the emoji during a session to pause and exit."
-        ),
-        WelcomeStep(
-            emoji: "📊",
-            title: "Track Your Progress",
-            description: "View your daily focus minutes, streak counter, and total time. Access detailed stats and achievements by tapping the calendar icon."
-        ),
-        WelcomeStep(
-            emoji: "🏆",
-            title: "Compete Globally",
-            description: "Join the leaderboard to see how you compare with other users worldwide. Sign in anonymously to participate and earn achievements."
-        ),
-        WelcomeStep(
-            emoji: "⚙️",
-            title: "Customize Your Experience",
-            description: "Change timer durations, pick custom emojis for focus and break time, and adjust settings to match your workflow preferences."
-        ),
-        WelcomeStep(
-            emoji: "🔒",
-            title: "Stay Focused",
-            description: "During focus sessions, the app prevents distractions by locking the screen and sending motivational notifications if you leave."
+            emoji: "🧠",
+            title: "The Science",
+            description: "Created by Francesco Cirillo in the 1980s, this technique leverages your brain's natural attention cycles for maximum productivity."
         ),
         WelcomeStep(
             emoji: "🚀",
             title: "Ready to Focus?",
-            description: "You're all set! Tap the timer to start your first Pomodoro session. Build streaks, earn achievements, and boost your productivity!"
+            description: "Tap the tomato to start your first Pomodoro session. Your productive journey begins now!"
         )
     ]
     
     var body: some View {
-        VStack(spacing: 30) {
+        VStack(spacing: 40) {
             Spacer()
             
             // Progress dots
@@ -856,7 +874,7 @@ struct WelcomeView: View {
                 
                 VStack(spacing: 16) {
                     Text(welcomeSteps[currentStep].title)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundColor(.primary)
                         .multilineTextAlignment(.center)
                     
@@ -885,49 +903,29 @@ struct WelcomeView: View {
                 
                 Spacer()
                 
-                if currentStep < welcomeSteps.count - 1 {
-                    Button("Next") {
+                Button(currentStep == welcomeSteps.count - 1 ? "Get Started!" : "Next") {
+                    if currentStep == welcomeSteps.count - 1 {
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            showingWelcome = false
+                        }
+                    } else {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             currentStep += 1
                         }
                     }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 30)
-                    .padding(.vertical, 12)
-                    .background(
-                        Capsule()
-                            .fill(Color.red)
-                    )
-                } else {
-                    Button("Get Started!") {
-                        withAnimation(.easeInOut(duration: 0.5)) {
-                            showingWelcome = false
-                        }
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 30)
-                    .padding(.vertical, 12)
-                    .background(
-                        Capsule()
-                            .fill(Color.green)
-                    )
                 }
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding(.horizontal, 30)
+                .padding(.vertical, 12)
+                .background(
+                    Capsule()
+                        .fill(currentStep == welcomeSteps.count - 1 ? Color.green : Color.red)
+                )
             }
             .padding(.horizontal, 30)
             
-            // Skip button for returning users
-            Button("Skip Tour") {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    showingWelcome = false
-                }
-            }
-            .font(.caption)
-            .foregroundColor(.secondary)
-            .padding(.bottom, 10)
-            
-            Spacer().frame(height: 30)
+            Spacer().frame(height: 50)
         }
     }
 }
@@ -939,7 +937,7 @@ struct WelcomeStep {
 }
 
 struct AppLockOverlay: View {
-    @ObservedObject var appLockManager: EnhancedAppLockManager
+    @ObservedObject var appLockManager: AppLockManager
     
     var body: some View {
         ZStack {
@@ -967,7 +965,9 @@ struct AppLockOverlay: View {
                 }
                 
                 Button("Return to Focus") {
-                    appLockManager.showingUnlockAlert = false
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        appLockManager.showingUnlockAlert = false
+                    }
                 }
                 .font(.headline)
                 .foregroundColor(.white)

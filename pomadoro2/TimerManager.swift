@@ -2,7 +2,7 @@
 //  TimerManager.swift
 //  pomadoro2
 //
-//  Created by Bill Mar on 7/30/25.
+//  Enhanced with missing debug methods and app lock manager
 //
 
 import Foundation
@@ -35,8 +35,10 @@ class TimerManager: ObservableObject {
     
     // Firebase integration
     private let firebaseManager = FirebaseManager()
-    // App lock manager
-    let appLockManager = AppLockManager()
+    
+    // App lock manager - Initialize it properly
+    @Published var appLockManager = AppLockManager()
+    
     private let userDefaults = UserDefaults.standard
     private var timer: Timer?
     private var cancellables = Set<AnyCancellable>()
@@ -361,28 +363,35 @@ class TimerManager: ObservableObject {
         return 1 - (timeRemaining / totalTime)
     }
     
-    // MARK: - Debug Methods (only available in debug builds)
+    // MARK: - Debug Methods (only available in DEBUG builds)
     
     #if DEBUG
     func debugPrintCurrentUser() {
-        print("=== DEBUG: Current User Info ===")
-        print("Authenticated: \(firebaseManager.isAuthenticated)")
-        print("User ID: \(firebaseManager.currentUser?.uid ?? "None")")
-        print("Online: \(firebaseManager.isOnline)")
-        print("Error: \(firebaseManager.errorMessage ?? "None")")
+        print("=== DEBUG: Current User ===")
+        if let user = firebaseManager.currentUser {
+            print("User ID: \(user.uid)")
+            print("Is Anonymous: \(user.isAnonymous)")
+            print("Is Authenticated: \(firebaseManager.isAuthenticated)")
+        } else {
+            print("No user authenticated")
+        }
+        print("Is Online: \(firebaseManager.isOnline)")
+        print("========================")
     }
     
     func debugPrintTimerStatus() {
         print("=== DEBUG: Timer Status ===")
-        print("Running: \(isRunning)")
-        print("Focus Mode: \(isFocusMode)")
+        print("Is Running: \(isRunning)")
+        print("Is Focus Mode: \(isFocusMode)")
         print("Time Remaining: \(formattedTime)")
-        print("Progress: \(progress)")
-        print("Locked: \(isLocked)")
+        print("Progress: \(String(format: "%.1f", progress * 100))%")
+        print("Is Locked: \(isLocked)")
+        print("App Lock Active: \(appLockManager.isAppLocked)")
+        print("=========================")
     }
     
     func debugCompleteSession() {
-        print("=== DEBUG: Completing Full Session ===")
+        print("DEBUG: Completing full session")
         let focusMinutes = Int(focusDuration / 60)
         updateStats(focusMinutesCompleted: focusMinutes)
         firebaseManager.logFocusSession(duration: focusMinutes)
@@ -390,54 +399,65 @@ class TimerManager: ObservableObject {
     }
     
     func debugCompletePartialSession() {
-        print("=== DEBUG: Completing Partial Session ===")
-        let partialMinutes = 10
-        updateStats(focusMinutesCompleted: partialMinutes)
-        firebaseManager.logFocusSession(duration: partialMinutes)
-        print("Added \(partialMinutes) minutes to stats")
+        print("DEBUG: Completing partial session (10 minutes)")
+        updateStats(focusMinutesCompleted: 10)
+        firebaseManager.logFocusSession(duration: 10)
+        print("Added 10 minutes to stats")
     }
     
     func debugAdd5Minutes() {
-        print("=== DEBUG: Adding 5 Minutes ===")
+        print("DEBUG: Adding 5 minutes to stats")
         updateStats(focusMinutesCompleted: 5)
         firebaseManager.logFocusSession(duration: 5)
         print("Added 5 minutes to stats")
     }
     
     func debugResetStats() {
-        print("=== DEBUG: Resetting All Stats ===")
+        print("DEBUG: Resetting all stats")
         todayFocusMinutes = 0
         totalFocusMinutes = 0
         currentStreak = 0
         lastCompletionDate = nil
-        
-        // Clear from UserDefaults
-        userDefaults.removeObject(forKey: "todayFocusMinutes")
-        userDefaults.removeObject(forKey: "totalFocusMinutes")
-        userDefaults.removeObject(forKey: "currentStreak")
-        userDefaults.removeObject(forKey: "lastCompletionDate")
-        
-        print("All stats reset to zero")
+        saveLocalStats()
+        syncWithFirebase()
+        print("All stats reset to 0")
     }
     
     func createTestLeaderboardData() {
-        print("=== DEBUG: Creating Test Leaderboard Data ===")
-        // This would create fake leaderboard entries for testing
-        // In a real implementation, you'd add test data to Firebase
-        for i in 1...10 {
-            let testMinutes = Int.random(in: 50...500)
-            let testStreak = Int.random(in: 1...30)
-            
-            // For testing purposes, we'll just log what would be created
-            print("Test User \(i): \(testMinutes) minutes, \(testStreak) day streak")
+        print("DEBUG: Creating test leaderboard data")
+        
+        // Create some sample sessions with different durations
+        let testSessions = [
+            (duration: 25, daysAgo: 0),
+            (duration: 25, daysAgo: 1),
+            (duration: 25, daysAgo: 2),
+            (duration: 25, daysAgo: 3),
+            (duration: 25, daysAgo: 4)
+        ]
+        
+        for session in testSessions {
+            let sessionDate = Calendar.current.date(byAdding: .day, value: -session.daysAgo, to: Date()) ?? Date()
+            firebaseManager.logFocusSession(duration: session.duration, completedAt: sessionDate)
         }
+        
+        // Update stats to reflect the test data
+        todayFocusMinutes += 25
+        totalFocusMinutes += 125 // 5 sessions x 25 minutes
+        currentStreak = 5
+        lastCompletionDate = Date()
+        
+        saveLocalStats()
+        syncWithFirebase()
+        
+        print("Created 5 test sessions totaling 125 minutes")
     }
     
     func clearTestData() {
-        print("=== DEBUG: Clearing Test Data ===")
-        // This would remove test data from Firebase
-        // For now, just log the action
-        print("Test data cleared (would remove from Firebase)")
+        print("DEBUG: Clearing test data")
+        debugResetStats()
+        // Note: We can't easily delete Firebase documents from the client
+        // but resetting local stats will help with testing
+        print("Local test data cleared")
     }
     #endif
 }

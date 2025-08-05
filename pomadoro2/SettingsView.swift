@@ -2,7 +2,7 @@
 //  SettingsView.swift
 //  pomadoro2
 //
-//  Created by Bill Mar on 7/30/25.
+//  Enhanced with live timer updates and cleaned up status section
 //
 
 import SwiftUI
@@ -56,6 +56,8 @@ struct SettingsView: View {
                                         if newValue.count > 2 {
                                             focusEmojiText = String(newValue.prefix(2))
                                         }
+                                        // Update timer manager immediately
+                                        updateTimerSettings()
                                     }
                                 
                                 Text("\(Int(focusMinutes)) min")
@@ -66,6 +68,10 @@ struct SettingsView: View {
                             
                             Slider(value: $focusMinutes, in: 1...60, step: 1)
                                 .accentColor(.red)
+                                .onChange(of: focusMinutes) { oldValue, newValue in
+                                    // Update timer manager immediately when slider changes
+                                    updateTimerSettings()
+                                }
                         }
                         .padding(.horizontal, 24)
                         .padding(.vertical, 20)
@@ -96,6 +102,8 @@ struct SettingsView: View {
                                         if newValue.count > 2 {
                                             breakEmojiText = String(newValue.prefix(2))
                                         }
+                                        // Update timer manager immediately
+                                        updateTimerSettings()
                                     }
                                 
                                 Text("\(Int(breakMinutes)) min")
@@ -106,6 +114,10 @@ struct SettingsView: View {
                             
                             Slider(value: $breakMinutes, in: 1...30, step: 1)
                                 .accentColor(.green)
+                                .onChange(of: breakMinutes) { oldValue, newValue in
+                                    // Update timer manager immediately when slider changes
+                                    updateTimerSettings()
+                                }
                         }
                         .padding(.horizontal, 24)
                         .padding(.vertical, 20)
@@ -130,6 +142,7 @@ struct SettingsView: View {
                                     ForEach(["🍅", "🔥", "🎯", "💪", "🧠", "🚀"], id: \.self) { emoji in
                                         Button(action: {
                                             focusEmojiText = emoji
+                                            updateTimerSettings()
                                         }) {
                                             Text(emoji)
                                                 .font(.body)
@@ -150,6 +163,7 @@ struct SettingsView: View {
                                     ForEach(["😌", "☕", "🌱", "🎵", "🍃", "🌟"], id: \.self) { emoji in
                                         Button(action: {
                                             breakEmojiText = emoji
+                                            updateTimerSettings()
                                         }) {
                                             Text(emoji)
                                                 .font(.body)
@@ -168,9 +182,9 @@ struct SettingsView: View {
                                 .fill(Color.gray.opacity(0.05))
                         )
                         
-                        // Current status
+                        // Current mode (simplified from previous status section)
                         VStack(spacing: 16) {
-                            Text("Current Status")
+                            Text("Current Mode")
                                 .font(.headline)
                                 .foregroundColor(.primary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -189,15 +203,17 @@ struct SettingsView: View {
                                 
                                 Spacer()
                                 
+                                // Show current timer value based on mode
                                 VStack(alignment: .trailing, spacing: 4) {
-                                    Text("Status")
+                                    Text("Timer Set To")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                     
-                                    Text(timerManager.isRunning ? "Running" : "Stopped")
+                                    Text(timerManager.formattedTime)
                                         .font(.headline)
-                                        .foregroundColor(timerManager.isRunning ? .green : .gray)
+                                        .foregroundColor(.primary)
                                         .fontWeight(.bold)
+                                        .font(.system(.headline, design: .monospaced))
                                 }
                             }
                         }
@@ -213,16 +229,11 @@ struct SettingsView: View {
                     Spacer()
                     
                     Button(action: {
-                        timerManager.updateSettings(
-                            focusMinutes: focusMinutes,
-                            breakMinutes: breakMinutes,
-                            focusEmoji: focusEmojiText,
-                            breakEmoji: breakEmojiText
-                        )
-                        
+                        // Final update to ensure everything is saved
+                        updateTimerSettings()
                         dismiss()
                     }) {
-                        Text("Save Changes")
+                        Text("Done")
                             .font(.headline)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -239,6 +250,8 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
+                        // Reset to original values when canceling
+                        resetToOriginalValues()
                         dismiss()
                     }
                     .foregroundColor(.secondary)
@@ -246,11 +259,37 @@ struct SettingsView: View {
             }
         }
         .onAppear {
-            focusMinutes = timerManager.focusDuration / 60
-            breakMinutes = timerManager.breakDuration / 60
-            focusEmojiText = timerManager.focusEmoji
-            breakEmojiText = timerManager.breakEmoji
+            loadCurrentValues()
         }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func loadCurrentValues() {
+        focusMinutes = timerManager.focusDuration / 60
+        breakMinutes = timerManager.breakDuration / 60
+        focusEmojiText = timerManager.focusEmoji
+        breakEmojiText = timerManager.breakEmoji
+    }
+    
+    private func updateTimerSettings() {
+        // Update timer manager immediately with current slider values
+        timerManager.updateSettings(
+            focusMinutes: focusMinutes,
+            breakMinutes: breakMinutes,
+            focusEmoji: focusEmojiText,
+            breakEmoji: breakEmojiText
+        )
+    }
+    
+    private func resetToOriginalValues() {
+        // Reset timer to original values if user cancels
+        timerManager.updateSettings(
+            focusMinutes: timerManager.focusDuration / 60,
+            breakMinutes: timerManager.breakDuration / 60,
+            focusEmoji: timerManager.focusEmoji,
+            breakEmoji: timerManager.breakEmoji
+        )
     }
 }
 
