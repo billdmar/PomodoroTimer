@@ -31,6 +31,20 @@ A polished Pomodoro focus-timer for iOS. Run customizable focus and break sessio
 | Backend | Firebase Cloud Firestore (leaderboard) |
 | Timer | Foundation `Timer` |
 
+## Screenshots
+
+<!--
+  Add screenshots here. Drop your images into a `docs/` folder and reference them, e.g.:
+
+  | Focus session | Settings | Leaderboard |
+  | :--: | :--: | :--: |
+  | ![Timer](docs/timer.png) | ![Settings](docs/settings.png) | ![Leaderboard](docs/leaderboard.png) |
+
+  In the iOS Simulator: File ▸ Save Screen (⌘S) saves a clean device-framed PNG.
+-->
+
+_Screenshots coming soon — run the app in the iOS Simulator and capture the timer, settings, and leaderboard screens._
+
 ## Project structure
 
 ```
