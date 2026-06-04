@@ -1,83 +1,64 @@
-# Pomodoro Timer App
+# Pomodoro Timer
 
-A simple and elegant Pomodoro timer iOS app built with SwiftUI.
+**Focus, one tomato at a time.** 🍅
+
+A polished Pomodoro focus-timer for iOS. Run customizable focus and break sessions, stay accountable with a focus-mode lock, track your productivity over time, and compete on a global leaderboard. Built with SwiftUI and Firebase.
+
+![Swift](https://img.shields.io/badge/Swift-5-orange?logo=swift&logoColor=white)
+![iOS](https://img.shields.io/badge/iOS-15%2B-000000?logo=apple&logoColor=white)
+![SwiftUI](https://img.shields.io/badge/UI-SwiftUI-0071e3)
+![Firebase](https://img.shields.io/badge/Firebase-Firestore-FFCA28?logo=firebase&logoColor=black)
+![License](https://img.shields.io/badge/License-MIT-green)
+
+---
 
 ## Features
 
-### 🍅 Tomato Timer
-- **25-minute focus sessions** by default
-- **5-minute break sessions** by default
-- **Customizable durations** through settings
-- **Visual progress circle** showing timer progress
-- **Focus mode locking** to keep you on task
+- **Focus & break sessions** — 25-minute focus and 5-minute break sessions by default, each fully customizable (1–60 min focus, 1–30 min break).
+- **Animated progress ring** — A visual progress circle and color-coded modes (red for focus, green for break) make your session state obvious at a glance.
+- **Focus-mode lock** — Locks you into a session to discourage task-switching, with reset and skip controls.
+- **Interactive tomato button** — Shake animation and star-particle bursts for a bit of delight.
+- **Stats** — Track sessions completed and time focused over time.
+- **Global leaderboard** — Compete with other users, backed by Firebase Cloud Firestore.
 
-### 🎯 Interactive Tomato Button
-- **Shake animation** when clicked
-- **Star particle effects** bursting from all sides
-- **Large, intuitive interface** for easy interaction
-- **Disabled during timer** to prevent interruption
+## Tech stack
 
-### ⚙️ Settings & Customization
-- **Edit focus duration** (1-60 minutes)
-- **Edit break duration** (1-30 minutes)
-- **Real-time preview** of current settings
-- **Save/cancel functionality**
+| Area | Technology |
+| --- | --- |
+| UI | SwiftUI (iOS 15+) |
+| Language | Swift 5 |
+| Architecture | MVVM with `ObservableObject` |
+| Backend | Firebase Cloud Firestore (leaderboard) |
+| Timer | Foundation `Timer` |
 
-### 🎨 Beautiful UI
-- **Gradient background** for visual appeal
-- **Color-coded modes** (red for focus, green for break)
-- **Smooth animations** throughout the app
-- **Modern iOS design** following Apple guidelines
-
-### 🔧 Controls
-- **Reset button** - Reset current timer
-- **Skip button** - Skip to next session
-- **Settings button** - Access customization options
-- **Lock indicator** - Shows when in focus mode
-
-## How to Use
-
-1. **Start a Focus Session**: Tap the tomato button to begin a 25-minute focus session
-2. **Stay Focused**: The app locks you in focus mode to prevent distractions
-3. **Take a Break**: After 25 minutes, enjoy a 5-minute break
-4. **Customize**: Use the settings button to adjust durations to your preference
-5. **Control**: Use the control buttons to reset, skip, or access settings
-
-## Technical Details
-
-- **Built with**: SwiftUI
-- **iOS Target**: iOS 15.0+
-- **Architecture**: MVVM with ObservableObject
-- **Animations**: SwiftUI animations for smooth interactions
-- **Timer**: Foundation Timer for accurate countdown
-
-## Files Structure
+## Project structure
 
 ```
 pomadoro2/
-├── pomadoro2App.swift          # App entry point
-├── ContentView.swift           # Main view with timer and controls
-├── TimerManager.swift          # Timer logic and state management
-├── TomatoButton.swift          # Interactive tomato button with animations
-├── StarParticlesView.swift     # Star particle effects
-├── SettingsView.swift          # Settings and customization
-└── Assets.xcassets/           # App icons and colors
+├── pomadoro2App.swift       # App entry point
+├── ContentView.swift        # Main timer screen and controls
+├── TimerManager.swift       # Timer logic and session state
+├── AppLockManager.swift     # Focus-mode locking
+├── TomatoButton.swift       # Interactive tomato button + animations
+├── StarParticlesView.swift  # Particle-effect celebrations
+├── SettingsView.swift       # Duration customization
+├── StatsView.swift          # Productivity stats
+├── LeaderboardView.swift    # Global leaderboard UI
+└── FirebaseManager.swift    # Firestore integration
 ```
 
-## Getting Started
+## Getting started
 
-1. Open the project in Xcode
-2. Select your target device or simulator
-3. Build and run the project
-4. Start your first Pomodoro session!
+1. Open `pomadoro2.xcodeproj` in Xcode.
+2. The project uses Firebase for the leaderboard. To run with your own backend, create a Firebase project and replace `pomadoro2/GoogleService-Info.plist` with your own config.
+3. Build and run on a simulator or device.
 
-## Pomodoro Technique
+> The bundled `GoogleService-Info.plist` holds Firebase **client** configuration, which Google designs to ship inside apps — access is controlled by Firestore security rules, not by keeping this file secret.
 
-The Pomodoro Technique is a time management method developed by Francesco Cirillo in the late 1980s. It uses a timer to break work into intervals, traditionally 25 minutes in length, separated by short breaks. This app helps you implement this technique effectively.
+## About the Pomodoro Technique
 
-**Benefits:**
-- Improved focus and concentration
-- Reduced mental fatigue
-- Better time management
-- Increased productivity
-- Regular breaks for mental health 
+The Pomodoro Technique, developed by Francesco Cirillo in the late 1980s, breaks work into focused intervals (traditionally 25 minutes) separated by short breaks — improving focus, reducing fatigue, and making time management more sustainable.
+
+## License
+
+[MIT](LICENSE) © William Mar
