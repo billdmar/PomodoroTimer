@@ -33,17 +33,12 @@ A polished Pomodoro focus-timer for iOS. Run customizable focus and break sessio
 
 ## Screenshots
 
-<!--
-  Add screenshots here. Drop your images into a `docs/` folder and reference them, e.g.:
+| Focus session | Settings | Leaderboard |
+| :--: | :--: | :--: |
+| ![Timer](docs/timer.png) | ![Settings](docs/settings.png) | ![Leaderboard](docs/leaderboard.png) |
 
-  | Focus session | Settings | Leaderboard |
-  | :--: | :--: | :--: |
-  | ![Timer](docs/timer.png) | ![Settings](docs/settings.png) | ![Leaderboard](docs/leaderboard.png) |
-
-  In the iOS Simulator: File ▸ Save Screen (⌘S) saves a clean device-framed PNG.
--->
-
-_Screenshots coming soon — run the app in the iOS Simulator and capture the timer, settings, and leaderboard screens._
+<!-- Capture in the iOS Simulator (File ▸ Save Screen / ⌘S), then drop the PNGs into
+     docs/ using the exact filenames above. See docs/SCREENSHOTS.md for the guide. -->>
 
 ## Project structure
 
