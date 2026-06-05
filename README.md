@@ -5,7 +5,7 @@
 A polished Pomodoro focus-timer for iOS. Run customizable focus and break sessions, stay accountable with a focus-mode lock, track your productivity over time, and compete on a global leaderboard. Built with SwiftUI and Firebase.
 
 ![Swift](https://img.shields.io/badge/Swift-5-orange?logo=swift&logoColor=white)
-![iOS](https://img.shields.io/badge/iOS-15%2B-000000?logo=apple&logoColor=white)
+![iOS](https://img.shields.io/badge/iOS-18.5%2B-000000?logo=apple&logoColor=white)
 ![SwiftUI](https://img.shields.io/badge/UI-SwiftUI-0071e3)
 ![Firebase](https://img.shields.io/badge/Firebase-Firestore-FFCA28?logo=firebase&logoColor=black)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -25,7 +25,7 @@ A polished Pomodoro focus-timer for iOS. Run customizable focus and break sessio
 
 | Area | Technology |
 | --- | --- |
-| UI | SwiftUI (iOS 15+) |
+| UI | SwiftUI (iOS 18.5+) |
 | Language | Swift 5 |
 | Architecture | MVVM with `ObservableObject` |
 | Backend | Firebase Cloud Firestore (leaderboard) |
