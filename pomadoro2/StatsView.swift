@@ -364,14 +364,15 @@ struct CompactStreakCalendarView: View {
     }
     
     private func hasActivityOnDate(_ date: Date) -> Bool {
-        guard let lastCompletion = lastCompletionDate else { return false }
-        
-        let today = Date()
-        let daysFromLastCompletion = calendar.dateComponents([.day], from: lastCompletion, to: today).day ?? 0
-        let daysFromDate = calendar.dateComponents([.day], from: date, to: today).day ?? 0
-        
-        // Show activity for dates within the current streak
-        return daysFromDate >= 0 && daysFromDate <= currentStreak && daysFromDate <= daysFromLastCompletion
+        // Shade the most recent `currentStreak` days ending on the last
+        // completion. Shared with the streak math so the calendar and the
+        // streak badge can never disagree.
+        StreakCalculator.isActiveDay(
+            date,
+            currentStreak: currentStreak,
+            lastCompletion: lastCompletionDate,
+            calendar: calendar
+        )
     }
     
     private func previousMonth() {

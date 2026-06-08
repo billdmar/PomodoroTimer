@@ -61,6 +61,8 @@ struct TomatoButton: View {
                 }, perform: {
                     // This won't be called since minimumDuration is 0
                 })
+                .accessibilityLabel(timerManager.isFocusMode ? "Start focus session" : "Start break")
+                .accessibilityHint("Double tap to begin the timer")
             }
         }
     }

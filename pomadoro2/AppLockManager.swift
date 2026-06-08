@@ -145,7 +145,7 @@ class EnhancedAppLockManager: ObservableObject {
         // Set up notification categories for interactive notifications
         setupNotificationCategories()
         
-        print("Enhanced app lock activated")
+        Log.debug("Enhanced app lock activated")
     }
     
     func unlockApp() {
@@ -161,7 +161,7 @@ class EnhancedAppLockManager: ObservableObject {
         // Cancel all pending return notifications
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         
-        print("Enhanced app lock deactivated")
+        Log.debug("Enhanced app lock deactivated")
     }
     
     private func setupNotificationCategories() {

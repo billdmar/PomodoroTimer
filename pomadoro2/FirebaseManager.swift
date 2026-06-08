@@ -36,9 +36,9 @@ class FirebaseManager: ObservableObject {
             DispatchQueue.main.async {
                 self?.isOnline = path.status == .satisfied
                 if path.status == .satisfied {
-                    print("Network connection restored")
+                    Log.debug("Network connection restored")
                 } else {
-                    print("Network connection lost")
+                    Log.debug("Network connection lost")
                 }
             }
         }
@@ -53,30 +53,38 @@ class FirebaseManager: ObservableObject {
                 self?.currentUser = user
                 self?.isAuthenticated = user != nil
                 if user != nil {
-                    print("User authenticated: \(user?.uid ?? "unknown")")
+                    Log.debug("User authenticated: \(user?.uid ?? "unknown")")
                 }
             }
         }
     }
     
-    func signInAnonymously() {
+    /// Signs in anonymously.
+    /// - Parameter userInitiated: When `true` (a tap on "Join"), failures are
+    ///   surfaced to `errorMessage`. The silent auto-sign-in at launch passes
+    ///   `false` so a benign failure never dumps an error into the UI.
+    func signInAnonymously(userInitiated: Bool = false) {
         guard isOnline else {
-            errorMessage = "No internet connection. Please check your network and try again."
+            if userInitiated {
+                errorMessage = "No internet connection. Please check your network and try again."
+            }
             return
         }
-        
+
         isLoading = true
         errorMessage = nil
-        
+
         auth.signInAnonymously { [weak self] result, error in
             DispatchQueue.main.async {
                 self?.isLoading = false
-                
+
                 if let error = error {
-                    self?.errorMessage = self?.friendlyErrorMessage(for: error) ?? error.localizedDescription
-                    print("Anonymous sign-in error: \(error)")
+                    if userInitiated {
+                        self?.errorMessage = self?.friendlyErrorMessage(for: error)
+                    }
+                    Log.debug("Anonymous sign-in error: \(error)")
                 } else {
-                    print("Anonymous sign-in successful")
+                    Log.debug("Anonymous sign-in successful")
                     self?.errorMessage = nil
                 }
             }
@@ -96,12 +104,12 @@ class FirebaseManager: ObservableObject {
     
     func saveUserStats(focusMinutes: Int, totalMinutes: Int, streak: Int) {
         guard let userId = currentUser?.uid else {
-            print("No authenticated user")
+            Log.debug("No authenticated user")
             return
         }
-        
+
         guard isOnline else {
-            print("Offline - stats will sync when connection is restored")
+            Log.debug("Offline - stats will sync when connection is restored")
             return
         }
         
@@ -116,36 +124,36 @@ class FirebaseManager: ObservableObject {
         
         db.collection("userStats").document(userId).setData(data, merge: true) { error in
             if let error = error {
-                print("Error saving user stats: \(error)")
+                Log.debug("Error saving user stats: \(error)")
             } else {
-                print("User stats saved successfully")
+                Log.debug("User stats saved successfully")
             }
         }
     }
     
     func loadUserStats(completion: @escaping (Int, Int, Int) -> Void) {
         guard let userId = currentUser?.uid else {
-            print("No authenticated user")
+            Log.debug("No authenticated user")
             completion(0, 0, 0)
             return
         }
-        
+
         guard isOnline else {
-            print("Offline - using local stats")
+            Log.debug("Offline - using local stats")
             completion(0, 0, 0)
             return
         }
-        
+
         db.collection("userStats").document(userId).getDocument { document, error in
             if let error = error {
-                print("Error loading user stats: \(error)")
+                Log.debug("Error loading user stats: \(error)")
                 completion(0, 0, 0)
                 return
             }
-            
+
             guard let document = document, document.exists,
                   let data = document.data() else {
-                print("No user stats found")
+                Log.debug("No user stats found")
                 completion(0, 0, 0)
                 return
             }
@@ -164,7 +172,7 @@ class FirebaseManager: ObservableObject {
     
     func getLeaderboard(limit: Int = 10, completion: @escaping ([LeaderboardEntry]) -> Void) {
         guard isOnline else {
-            print("Offline - cannot load leaderboard")
+            Log.debug("Offline - cannot load leaderboard")
             completion([])
             return
         }
@@ -174,7 +182,7 @@ class FirebaseManager: ObservableObject {
             .limit(to: limit)
             .getDocuments { snapshot, error in
                 if let error = error {
-                    print("Error fetching leaderboard: \(error)")
+                    Log.debug("Error fetching leaderboard: \(error)")
                     completion([])
                     return
                 }
@@ -199,12 +207,12 @@ class FirebaseManager: ObservableObject {
     
     func logFocusSession(duration: Int, completedAt: Date = Date()) {
         guard let userId = currentUser?.uid else {
-            print("No authenticated user")
+            Log.debug("No authenticated user")
             return
         }
-        
+
         guard isOnline else {
-            print("Offline - session will be logged when connection is restored")
+            Log.debug("Offline - session will be logged when connection is restored")
             return
         }
         
@@ -217,9 +225,9 @@ class FirebaseManager: ObservableObject {
         
         db.collection("focusSessions").addDocument(data: sessionData) { error in
             if let error = error {
-                print("Error logging focus session: \(error)")
+                Log.debug("Error logging focus session: \(error)")
             } else {
-                print("Focus session logged successfully")
+                Log.debug("Focus session logged successfully")
             }
         }
     }
