@@ -12,7 +12,8 @@ struct ContentView: View {
     @StateObject private var timerManager = TimerManager()
     @State private var showingSettings = false
     @State private var showDebugPanel = false
-    @State private var showingWelcome = true
+    // Skipped during UI tests so they can start on the main screen deterministically.
+    @State private var showingWelcome = !ProcessInfo.processInfo.arguments.contains("-skipWelcome")
     @State private var showingStats = false
     @State private var showingLeaderboard = false
     @State private var colorShift: CGFloat = 0
@@ -55,6 +56,18 @@ struct ContentView: View {
                 if timerManager.appLockManager.isAppLocked && timerManager.appLockManager.showingUnlockAlert {
                     AppLockOverlay(appLockManager: timerManager.appLockManager)
                         .transition(.opacity.combined(with: .scale))
+                }
+            }
+        }
+        .onAppear {
+            // Deep-link launch arguments used for deterministic screenshots/tests.
+            let args = ProcessInfo.processInfo.arguments
+            if let i = args.firstIndex(of: "-screen"), i + 1 < args.count {
+                switch args[i + 1] {
+                case "settings": showingSettings = true
+                case "leaderboard": showingLeaderboard = true
+                case "stats": showingStats = true
+                default: break
                 }
             }
         }
@@ -374,6 +387,7 @@ struct ContentView: View {
                         )
                 }
                 .disabled(timerManager.isRunning)
+                .accessibilityLabel("Stats and streak calendar")
             }
             .padding(.horizontal, 30)
             .padding(.top, 10)
@@ -504,6 +518,11 @@ struct ContentView: View {
                         }
                     }
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(timerManager.isFocusMode ? "Focus timer" : "Break timer")
+                .accessibilityValue("\(timerManager.formattedTime) remaining")
+                .accessibilityHint(timerManager.isRunning ? "" : "Double tap to start the session")
+                .accessibilityAddTraits(.isButton)
                 
                 // Modern control buttons
                 HStack(spacing: 30) {
@@ -516,7 +535,8 @@ struct ContentView: View {
                             }
                         },
                         disabled: timerManager.isRunning,
-                        color: .gray
+                        color: .gray,
+                        accessibilityLabel: "Reset timer"
                     )
                     
                     // Skip/Mode Switch button
@@ -533,23 +553,26 @@ struct ContentView: View {
                             }
                         },
                         disabled: false,
-                        color: .blue
+                        color: .blue,
+                        accessibilityLabel: timerManager.isFocusMode ? "Skip focus session" : "Switch mode"
                     )
-                    
+
                     // Leaderboard button
                     ControlButton(
                         icon: "trophy.fill",
                         action: { showingLeaderboard = true },
                         disabled: timerManager.isRunning,
-                        color: .yellow
+                        color: .yellow,
+                        accessibilityLabel: "Leaderboard"
                     )
-                    
+
                     // Settings button
                     ControlButton(
                         icon: "gearshape.fill",
                         action: { showingSettings = true },
                         disabled: timerManager.isRunning,
-                        color: .purple
+                        color: .purple,
+                        accessibilityLabel: "Settings"
                     )
                 }
                 .frame(maxWidth: .infinity)
@@ -622,6 +645,8 @@ struct ContentView: View {
                         .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
                         .opacity(timerManager.isRunning ? 1 : 0)
                         .animation(.easeInOut(duration: 1.0).delay(0.8), value: timerManager.isRunning)
+                        .accessibilityLabel(timerManager.isFocusMode ? "Focus time remaining" : "Break time remaining")
+                        .accessibilityValue(timerManager.formattedTime)
                     
                     // Emoji with timer ring border
                     ZStack {
@@ -772,7 +797,8 @@ struct ControlButton: View {
     let action: () -> Void
     let disabled: Bool
     let color: Color
-    
+    var accessibilityLabel: String = ""
+
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
@@ -788,6 +814,7 @@ struct ControlButton: View {
         .disabled(disabled)
         .scaleEffect(disabled ? 0.9 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: disabled)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
