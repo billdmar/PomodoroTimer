@@ -33,7 +33,7 @@ struct LeaderboardView: View {
                             .padding(.horizontal, 40)
                         
                         Button(action: {
-                            firebaseManager.signInAnonymously()
+                            firebaseManager.signInAnonymously(userInitiated: true)
                         }) {
                             HStack {
                                 if firebaseManager.isLoading {

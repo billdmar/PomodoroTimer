@@ -250,21 +250,29 @@ class TimerManager: ObservableObject {
     }
     
     private func updateStats(focusMinutesCompleted: Int) {
+        let now = Date()
         let isNewDay = checkIfNewDay()
-        
+
         if isNewDay {
             todayFocusMinutes = focusMinutesCompleted
-            currentStreak += 1
         } else {
             todayFocusMinutes += focusMinutesCompleted
         }
-        
+
+        // Streak math lives in StreakCalculator so a multi-day gap correctly
+        // resets the streak instead of simply incrementing on any new day.
+        currentStreak = StreakCalculator.updatedStreak(
+            previousStreak: currentStreak,
+            lastCompletion: lastCompletionDate,
+            now: now
+        )
+
         totalFocusMinutes += focusMinutesCompleted
-        lastCompletionDate = Date()
-        
+        lastCompletionDate = now
+
         // Save locally
         saveLocalStats()
-        
+
         // Save to Firebase
         syncWithFirebase()
     }
@@ -312,7 +320,7 @@ class TimerManager: ObservableObject {
     private func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error = error {
-                print("Notification permission error: \(error)")
+                Log.debug("Notification permission error: \(error)")
             }
         }
     }
@@ -328,7 +336,7 @@ class TimerManager: ObservableObject {
         
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("Notification error: \(error)")
+                Log.debug("Notification error: \(error)")
             }
         }
     }
@@ -344,8 +352,8 @@ class TimerManager: ObservableObject {
     func updateSettings(focusMinutes: Double, breakMinutes: Double, focusEmoji: String, breakEmoji: String) {
         focusDuration = focusMinutes * 60
         breakDuration = breakMinutes * 60
-        self.focusEmoji = focusEmoji.isEmpty ? "🍅" : focusEmoji
-        self.breakEmoji = breakEmoji.isEmpty ? "😌" : breakEmoji
+        self.focusEmoji = TimerMath.normalizedEmoji(focusEmoji, default: "🍅")
+        self.breakEmoji = TimerMath.normalizedEmoji(breakEmoji, default: "😌")
         
         if !isRunning {
             timeRemaining = isFocusMode ? focusDuration : breakDuration
@@ -353,14 +361,12 @@ class TimerManager: ObservableObject {
     }
     
     var formattedTime: String {
-        let minutes = Int(timeRemaining) / 60
-        let seconds = Int(timeRemaining) % 60
-        return String(format: "%02d:%02d", minutes, seconds)
+        TimerMath.formattedTime(timeRemaining)
     }
-    
+
     var progress: Double {
         let totalTime = isFocusMode ? focusDuration : breakDuration
-        return 1 - (timeRemaining / totalTime)
+        return TimerMath.progress(timeRemaining: timeRemaining, total: totalTime)
     }
     
     // MARK: - Debug Methods (only available in DEBUG builds)
