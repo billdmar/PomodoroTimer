@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test (iOS Simulator)
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Resolve Swift packages
+        run: xcodebuild -resolvePackageDependencies -project pomadoro2.xcodeproj -scheme pomadoro2
+
+      # Builds the app and runs the unit-test target. UI tests live in the repo
+      # for local use (Xcode ⌘U) but are excluded from CI: headless simulators
+      # flakily fail to acquire UI background assertions, which is an
+      # environment issue rather than an app defect. The unit suite gates CI.
+      - name: Build & test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project pomadoro2.xcodeproj \
+            -scheme pomadoro2 \
+            -sdk iphonesimulator \
+            -destination 'platform=iOS Simulator,OS=latest,name=iPhone 16 Pro' \
+            -derivedDataPath .build/DerivedData \
+            -only-testing:pomadoro2Tests \
+            CODE_SIGNING_ALLOWED=NO

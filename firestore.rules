@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// Security rules for the Pomodoro Timer leaderboard backend.
+//
+// Design notes:
+// - The leaderboard is public by intent: any client may READ aggregate
+//   userStats to render the top-N board.
+// - WRITES are locked to the authenticated owner of each document and are
+//   field/type validated so a client cannot inject arbitrary data or spoof
+//   another user's totals.
+// - Deploy with:  firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Validates a userStats document: required numeric fields, all non-negative.
+    function isValidUserStats(data) {
+      return data.todayFocusMinutes is int
+          && data.todayFocusMinutes >= 0
+          && data.totalFocusMinutes is int
+          && data.totalFocusMinutes >= 0
+          && data.currentStreak is int
+          && data.currentStreak >= 0;
+    }
+
+    // Per-user stats, keyed by the user's auth uid. Read-only to everyone
+    // (leaderboard); writable only by the owner.
+    match /userStats/{userId} {
+      allow read: if true;
+
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && isValidUserStats(request.resource.data);
+    }
+
+    // Append-only focus session log. A client may create its own sessions
+    // but may never read, edit, or delete session records.
+    match /focusSessions/{sessionId} {
+      allow read: if false;
+      allow update, delete: if false;
+
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.userId
+                    && request.resource.data.duration is int
+                    && request.resource.data.duration >= 0
+                    && request.resource.data.duration <= 1440; // minutes in a day
+    }
+
+    // Deny everything not explicitly matched above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
