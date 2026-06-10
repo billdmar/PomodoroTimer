@@ -1,7 +1,8 @@
 # Capturing screenshots for the README
 
-The README's Screenshots table expects three PNGs in this `docs/` folder:
-`timer.png`, `settings.png`, `leaderboard.png`. Here's how to produce them.
+The README's Screenshots tables expect these PNGs in this `docs/` folder:
+`home.png`, `timer.png`, `break.png`, `settings.png`, `stats.png`,
+`leaderboard.png`, and `skip.png`. Here's how to produce them.
 
 ## 1. Install an iOS simulator (one time)
 Xcode ▸ **Settings… ▸ Components** (older Xcode: **Platforms**) ▸ download an
@@ -21,9 +22,13 @@ device-framed PNG to your Desktop. Capture:
 
 | Filename | What to show |
 | --- | --- |
+| `home.png` | The home screen — stats row, tomato, and the 25:00 timer |
 | `timer.png` | A running focus session — the animated progress ring + tomato button |
+| `break.png` | A running break session (blue mode) |
 | `settings.png` | The settings screen with the duration controls visible |
+| `stats.png` | The progress view — today's stats and the streak calendar |
 | `leaderboard.png` | The leaderboard view (populated if Firebase is configured) |
+| `skip.png` | The focus-mode lock with the "skip session" confirmation |
 
 ## 4. Drop them in and push
 ```bash
