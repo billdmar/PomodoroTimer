@@ -42,9 +42,9 @@ A polished Pomodoro focus-timer for iOS. Run customizable focus and break sessio
 | :--: | :--: | :--: |
 | ![Settings](docs/settings.png) | ![Progress](docs/stats.png) | ![Leaderboard](docs/leaderboard.png) |
 
-| Focus-mode lock |
-| :--: |
-| ![Skip focus prompt](docs/skip.png) |
+| Focus-mode lock | | |
+| :--: | :--: | :--: |
+| ![Skip focus prompt](docs/skip.png) | | |
 
 ## Project structure
 
