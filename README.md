@@ -32,6 +32,8 @@ A polished Pomodoro focus-timer for iOS. Run customizable focus and break sessio
 | Backend | Firebase Cloud Firestore (leaderboard) |
 | Timer | Foundation `Timer` |
 
+For a deeper walkthrough of the timer state machine, focus-mode lock, and Firestore leaderboard, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Screenshots
 
 | Focus session | Settings | Leaderboard |
