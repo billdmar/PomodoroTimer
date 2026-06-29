@@ -30,7 +30,14 @@ Add these files to **both** the `pomadoro2` and `PomodoroWidget` target
 memberships (File Inspector ▸ Target Membership):
 - `pomadoro2/SharedSessionState.swift`
 - `pomadoro2/DesignTokens.swift`
-- `pomadoro2/TimerActivityAttributes.swift`  (added in Phase 8)
+- `pomadoro2/TimerActivityAttributes.swift`  (Live Activity)
+- `pomadoro2/PendingCommandStore.swift`  (Control Center → app mailbox)
+- `pomadoro2/PomodoroIntents.swift`  (the Control runs `StartFocusSessionIntent`)
+- `pomadoro2/StatsStore.swift`  (CheckStreakIntent reads persisted stats)
+
+Also add `PomodoroWidget/PomodoroControl.swift` to the **widget** target only.
+The iOS-18 Control Center control ships in the existing widget extension — no
+new target is required.
 
 ## 3. Add the App Group to BOTH targets
 For the `pomadoro2` target **and** the `PomodoroWidget` target:
