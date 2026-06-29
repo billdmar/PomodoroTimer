@@ -78,6 +78,7 @@ class TimerManager: ObservableObject {
     private let goalStore = GoalStore()
     private let historyStore = DailyHistoryStore()
     private let appearanceStore = AppearanceSettingsStore()
+    private let pendingCommandStore = PendingCommandStore()
     // Min deployment is iOS 18.5, so the 16.1-gated controller is always usable.
     private let liveActivity = LiveActivityController()
     private var cancellables = Set<AnyCancellable>()
@@ -363,9 +364,27 @@ class TimerManager: ObservableObject {
         switch phase {
         case .active:
             recompute()
+            consumePendingCommand()
         case .background:
             if isRunning { saveSession() }
         default:
+            break
+        }
+    }
+
+    /// Applies a command queued by an App Intent / Siri / Control Center while
+    /// the app was backgrounded.
+    private func consumePendingCommand() {
+        switch pendingCommandStore.consume() {
+        case .startFocus:
+            // Start a fresh focus session if one isn't already running.
+            if !isRunning {
+                if !isFocusMode { switchMode() }
+                startTimer()
+            }
+        case .togglePause:
+            isRunning ? pauseTimer() : startTimer()
+        case .none:
             break
         }
     }

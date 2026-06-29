@@ -15,5 +15,8 @@ struct PomodoroWidgetBundle: WidgetBundle {
     var body: some Widget {
         PomodoroWidget()
         PomodoroLiveActivity()
+        if #available(iOS 18.0, *) {
+            PomodoroControl()
+        }
     }
 }
