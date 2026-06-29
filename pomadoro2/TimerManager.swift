@@ -90,15 +90,9 @@ class TimerManager: ObservableObject {
     private let externalServicesEnabled: Bool
     private var cancellables = Set<AnyCancellable>()
 
-    // Explicit state machine (see TimerState). The wall clock remains the
-    // source of truth — a running state carries its `endDate` and the visible
-    // `timeRemaining`/`isRunning` are derived from `state`, so the countdown is
-    // immune to background suspension and tick drift. `tickTask` only refreshes
-    // the UI; it is not the clock.
-    private var state: TimerState = .idle(remaining: TimerConstants.defaultFocusDuration) {
-        didSet { isRunning = state.isRunning }
-    }
-    private var tickTask: Task<Void, Never>?
+    /// The countdown clock. TimerManager orchestrates around it (notifications,
+    /// stats, app lock, Live Activity); the engine owns the TimerState + tick.
+    private let engine: SessionEngine
 
     /// Designated initializer. All dependencies default to production, so
     /// `TimerManager()` works for the app; tests inject a mock backend, an
@@ -120,10 +114,18 @@ class TimerManager: ObservableObject {
         self.appearanceStore = AppearanceSettingsStore(defaults: defaults)
         self.pendingCommandStore = PendingCommandStore(defaults: defaults)
         self.externalServicesEnabled = enableExternalServices
+        self.engine = SessionEngine(initialRemaining: TimerConstants.defaultFocusDuration)
 
         loadSettings()
-        state = .idle(remaining: focusDuration)
+        engine.reset(to: focusDuration)
         timeRemaining = focusDuration
+        // Mirror the engine's clock into the @Published surface the views read.
+        engine.onTick = { [weak self] remaining in
+            self?.timeRemaining = remaining
+        }
+        engine.onFinished = { [weak self] in
+            self?.timerCompleted()
+        }
         selectRandomMessage()
         generateRandomMotivationalQuote()
         loadLocalStats()
@@ -133,6 +135,12 @@ class TimerManager: ObservableObject {
             setupFirebase()
             observeExtendRequests()
         }
+    }
+
+    /// Derived from the engine's state; kept as a stored @Published mirror so
+    /// SwiftUI re-renders. Updated by the engine callbacks + transitions below.
+    private func syncRunningFlag() {
+        isRunning = engine.isRunning
     }
 
     private func loadSettings() {
@@ -169,13 +177,10 @@ class TimerManager: ObservableObject {
     /// Adds time to a running (or paused) session — wired to the notification's
     /// "Extend +5 min" action and usable from the UI.
     func extend(byMinutes minutes: Int = 5) {
-        let added = TimeInterval(minutes * 60)
-        switch state {
-        case .running:
-            // Re-anchor the deadline and reschedule the completion notification.
-            let newEnd = Date().addingTimeInterval(state.remaining(now: Date()) + added)
-            state = .running(endDate: newEnd)
-            timeRemaining = state.remaining(now: Date())
+        let newEnd = engine.extend(by: TimeInterval(minutes * 60))
+        timeRemaining = engine.remaining()
+        if let newEnd {
+            // Running: re-anchor the deadline-driven side effects.
             saveSession()
             publishSharedState()
             if externalServicesEnabled {
@@ -183,14 +188,6 @@ class TimerManager: ObservableObject {
                 scheduleCompletionNotification(endDate: newEnd)
                 liveActivity.update(endDate: newEnd, isFocusMode: isFocusMode, emoji: currentEmoji)
             }
-        case let .paused(remaining):
-            let updated = remaining + added
-            state = .paused(remaining: updated)
-            timeRemaining = updated
-        case let .idle(remaining):
-            let updated = remaining + added
-            state = .idle(remaining: updated)
-            timeRemaining = updated
         }
     }
 
@@ -205,15 +202,16 @@ class TimerManager: ObservableObject {
         case let .resume(remaining, focusMode):
             isFocusMode = focusMode
             // Restored as paused: the user explicitly resumes.
-            state = .paused(remaining: remaining)
+            engine.restorePaused(remaining: remaining)
             timeRemaining = remaining
             isLocked = false
         case let .expired(focusMode):
             isFocusMode = focusMode
             let remaining = focusMode ? focusDuration : breakDuration
-            state = .idle(remaining: remaining)
+            engine.reset(to: remaining)
             timeRemaining = remaining
         }
+        syncRunningFlag()
         sessionStore.clear()
     }
 
@@ -234,7 +232,7 @@ class TimerManager: ObservableObject {
             isRunning: isRunning,
             isFocusMode: isFocusMode,
             emoji: currentEmoji,
-            endDate: state.endDate,
+            endDate: engine.endDate,
             timeRemaining: timeRemaining
         ))
         WidgetCenter.shared.reloadAllTimelines()
@@ -275,10 +273,10 @@ class TimerManager: ObservableObject {
     }
 
     func startTimer() {
-        // Anchor the deadline to the wall clock so the countdown stays correct
-        // even if the app is backgrounded or the tick is delayed.
-        let endDate = Date().addingTimeInterval(timeRemaining)
-        state = .running(endDate: endDate)
+        // The engine anchors the deadline to the wall clock so the countdown
+        // stays correct even if the app is backgrounded or the tick is delayed.
+        let endDate = engine.start(duration: timeRemaining)
+        syncRunningFlag()
 
         isLocked = true
         selectRandomMessage()
@@ -299,22 +297,14 @@ class TimerManager: ObservableObject {
             scheduleCompletionNotification(endDate: endDate)
             liveActivity.start(endDate: endDate, isFocusMode: isFocusMode, emoji: currentEmoji)
         }
-        startTick()
         Haptics.medium()
     }
 
     func pauseTimer() {
-        // Freeze the derived remaining time before leaving the running state.
-        // Computed directly from `state` (not via recompute()) so pausing never
-        // triggers completion — completion flows only through the tick/recompute
-        // path, which avoids a pause↔complete recursion.
-        if state.isRunning {
-            let remaining = state.remaining(now: Date())
-            timeRemaining = remaining
-            state = .paused(remaining: remaining)
-        }
+        engine.pause()
+        timeRemaining = engine.remaining()
+        syncRunningFlag()
         isLocked = false
-        stopTick()
 
         // Unlock app when pausing
         appLockManager.unlockApp()
@@ -328,38 +318,10 @@ class TimerManager: ObservableObject {
         }
     }
 
-    // MARK: - Tick & deadline
-
-    /// Drives UI refresh while running. The wall clock — not this loop — is the
-    /// source of truth, so a delayed or skipped tick never loses time.
-    private func startTick() {
-        stopTick()
-        tickTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                guard let self, self.state.isRunning else { return }
-                self.recompute()
-                try? await Task.sleep(nanoseconds: UInt64(TimerConstants.tickInterval * 1_000_000_000))
-            }
-        }
-    }
-
-    private func stopTick() {
-        tickTask?.cancel()
-        tickTask = nil
-    }
-
-    /// Recomputes `timeRemaining` from the deadline and completes the session
-    /// once the deadline has passed. Safe to call on foreground/recovery — it
-    /// shares the single completion path with the normal tick.
+    /// Recomputes remaining from the wall clock and completes if the deadline
+    /// passed. Delegates to the engine; used by the scene-phase recovery path.
     func recompute() {
-        guard state.isRunning else { return }
-        let now = Date()
-        if state.hasCompleted(now: now) {
-            timeRemaining = 0
-            timerCompleted()
-        } else {
-            timeRemaining = state.remaining(now: now)
-        }
+        engine.recompute()
     }
 
     private func scheduleCompletionNotification(endDate: Date) {
@@ -433,14 +395,11 @@ class TimerManager: ObservableObject {
         startTimer()
     }
 
-    deinit {
-        tickTask?.cancel()
-    }
-
     func resetTimer() {
         pauseTimer()
         let remaining = isFocusMode ? focusDuration : breakDuration
-        state = .idle(remaining: remaining)
+        engine.reset(to: remaining)
+        syncRunningFlag()
         timeRemaining = remaining
         // Back to a fresh idle state — nothing to recover.
         sessionStore.clear()
@@ -463,7 +422,8 @@ class TimerManager: ObservableObject {
         pauseTimer()
         isFocusMode.toggle()
         let remaining = isFocusMode ? focusDuration : breakDuration
-        state = .idle(remaining: remaining)
+        engine.reset(to: remaining)
+        syncRunningFlag()
         timeRemaining = remaining
     }
 
@@ -512,7 +472,8 @@ class TimerManager: ObservableObject {
         } else {
             remaining = nextBreakIsLong ? longBreakDuration : breakDuration
         }
-        state = .idle(remaining: remaining)
+        engine.reset(to: remaining)
+        syncRunningFlag()
         timeRemaining = remaining
 
         // The completed session shouldn't be recovered on next launch; the
@@ -633,7 +594,7 @@ class TimerManager: ObservableObject {
 
         if !isRunning {
             let remaining = isFocusMode ? focusDuration : breakDuration
-            state = .idle(remaining: remaining)
+            engine.reset(to: remaining)
             timeRemaining = remaining
         }
     }
