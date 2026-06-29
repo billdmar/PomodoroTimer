@@ -10,6 +10,7 @@ import Foundation
 
 struct ContentView: View {
     @StateObject private var timerManager = TimerManager()
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showingSettings = false
     @State private var showDebugPanel = false
     // Skipped during UI tests so they can start on the main screen deterministically.
@@ -105,8 +106,12 @@ struct ContentView: View {
                     .italic()
             }
         }
-        .onDisappear {
-            timerManager.pauseTimer()
+        // The timer is now deadline-based and background-safe, so we no longer
+        // pause it when the view leaves. Instead we recompute on foreground
+        // (recovering time that passed while suspended) and snapshot on
+        // background for crash recovery.
+        .onChange(of: scenePhase) { _, newPhase in
+            timerManager.handleScenePhase(newPhase)
         }
         .onReceive(Timer.publish(every: 3.0, on: .main, in: .common).autoconnect()) { _ in
             if timerManager.isRunning {

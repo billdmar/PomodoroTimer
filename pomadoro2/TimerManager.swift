@@ -42,8 +42,16 @@ class TimerManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     private let settingsStore = SettingsStore()
     private let sessionStore = SessionStore()
-    private var timer: Timer?
     private var cancellables = Set<AnyCancellable>()
+
+    // Deadline-based timing: while running, `endDate` is the source of truth and
+    // `timeRemaining` is derived from the wall clock. This makes the countdown
+    // immune to background suspension and main-thread drift — the old approach
+    // decremented `timeRemaining` on a 1 Hz Timer that froze when the app was
+    // backgrounded. The `tickTask` only refreshes the UI; it is not the clock.
+    private var endDate: Date?
+    private var tickTask: Task<Void, Never>?
+    private static let completionNotificationID = "timer.completion"
 
     private let encouragingMessages = [
         "🔥 You're crushing it! Stay focused!",
@@ -176,8 +184,9 @@ class TimerManager: ObservableObject {
     }
 
     func startTimer() {
-        timer?.invalidate()
-        timer = nil
+        // Anchor the deadline to the wall clock so the countdown stays correct
+        // even if the app is backgrounded or the tick is delayed.
+        endDate = Date().addingTimeInterval(timeRemaining)
 
         isRunning = true
         isLocked = true
@@ -188,31 +197,110 @@ class TimerManager: ObservableObject {
             appLockManager.lockApp()
         }
 
+        scheduleCompletionNotification()
         saveSession()
-
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                if self.timeRemaining > 0 {
-                    self.timeRemaining -= 1
-                } else {
-                    self.timerCompleted()
-                }
-            }
-        }
+        startTick()
     }
 
     func pauseTimer() {
+        // Freeze the derived remaining time before discarding the deadline.
+        // Computed inline (not via recompute()) so pausing never triggers
+        // completion — completion flows only through the tick/recompute path,
+        // which avoids a pause↔complete recursion.
+        if isRunning, let endDate {
+            timeRemaining = TimerMath.remaining(until: endDate, now: Date())
+        }
         isRunning = false
         isLocked = false
-        timer?.invalidate()
-        timer = nil
+        endDate = nil
+        stopTick()
+        cancelCompletionNotification()
 
         // Unlock app when pausing
         appLockManager.unlockApp()
 
         // Persist the paused state so it survives a quit.
         saveSession()
+    }
+
+    // MARK: - Tick & deadline
+
+    /// Drives UI refresh while running. The wall clock — not this loop — is the
+    /// source of truth, so a delayed or skipped tick never loses time.
+    private func startTick() {
+        stopTick()
+        tickTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.isRunning else { return }
+                self.recompute()
+                try? await Task.sleep(nanoseconds: 250_000_000) // 0.25s
+            }
+        }
+    }
+
+    private func stopTick() {
+        tickTask?.cancel()
+        tickTask = nil
+    }
+
+    /// Recomputes `timeRemaining` from the deadline and completes the session
+    /// once the deadline has passed. Safe to call on foreground/recovery — it
+    /// shares the single completion path with the normal tick.
+    func recompute() {
+        guard isRunning, let endDate else { return }
+        let now = Date()
+        if TimerMath.hasCompleted(endDate: endDate, now: now) {
+            timeRemaining = 0
+            timerCompleted()
+        } else {
+            timeRemaining = TimerMath.remaining(until: endDate, now: now)
+        }
+    }
+
+    private func scheduleCompletionNotification() {
+        guard let endDate else { return }
+        let interval = endDate.timeIntervalSinceNow
+        guard interval > 0 else { return }
+
+        let content = UNMutableNotificationContent()
+        let completedMode = isFocusMode ? "Focus" : "Break"
+        let nextMode = isFocusMode ? "break" : "focus"
+        content.title = "Pomodoro Timer Complete! 🍅"
+        content.body = "\(completedMode) session finished! Ready for \(nextMode) time?"
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: Self.completionNotificationID,
+            content: content,
+            trigger: trigger
+        )
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                Log.debug("Completion notification error: \(error)")
+            }
+        }
+    }
+
+    private func cancelCompletionNotification() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: [Self.completionNotificationID]
+        )
+    }
+
+    /// Drives background/foreground handling for a running session. On return
+    /// to the foreground we recompute from the wall clock (recovering any time
+    /// that passed while suspended, completing the session if its deadline
+    /// passed); on backgrounding we persist a snapshot for crash recovery.
+    func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            recompute()
+        case .background:
+            if isRunning { saveSession() }
+        default:
+            break
+        }
     }
 
     func restartCurrentTimer() {
@@ -222,8 +310,7 @@ class TimerManager: ObservableObject {
     }
 
     deinit {
-        timer?.invalidate()
-        timer = nil
+        tickTask?.cancel()
     }
 
     func resetTimer() {
@@ -259,8 +346,10 @@ class TimerManager: ObservableObject {
         completionMessage = "\(completedMode) session complete! Time for a \(nextMode.lowercased()) 🎉"
         showingCompletionAlert = true
 
+        // In-app feedback. The scheduled completion notification (set at start)
+        // covers the case where the app is backgrounded/suspended at the
+        // deadline; pauseTimer() above cancels it so we never double-notify.
         AudioServicesPlaySystemSound(1005)
-        sendCompletionNotification(completedMode: completedMode, nextMode: nextMode)
 
         // Unlock app when session completes
         appLockManager.unlockApp()
@@ -375,22 +464,6 @@ class TimerManager: ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, error in
             if let error = error {
                 Log.debug("Notification permission error: \(error)")
-            }
-        }
-    }
-
-    private func sendCompletionNotification(completedMode: String, nextMode: String) {
-        let content = UNMutableNotificationContent()
-        content.title = "Pomodoro Timer Complete! 🍅"
-        content.body = "\(completedMode) session finished! Ready for \(nextMode.lowercased()) time?"
-        content.sound = UNNotificationSound.default
-
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
-        let request = UNNotificationRequest(identifier: "timer-complete", content: content, trigger: trigger)
-
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                Log.debug("Notification error: \(error)")
             }
         }
     }
