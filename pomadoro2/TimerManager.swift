@@ -41,6 +41,10 @@ class TimerManager: ObservableObject {
     /// focus session that hits the long-break cadence completes).
     @Published var isLongBreak = false
 
+    /// Set when a focus session newly unlocks an achievement; the UI presents a
+    /// celebration overlay and clears it via `dismissAchievement()`.
+    @Published var justUnlockedAchievement: Achievement?
+
     /// Long break length (used every Nth break). Persisted with the other
     /// settings.
     @Published var longBreakDuration: TimeInterval = TimerConstants.defaultLongBreakDuration
@@ -156,6 +160,11 @@ class TimerManager: ObservableObject {
         accentTheme = appearance.accent
         appearanceMode = appearance.appearance
         completionSound = appearance.completionSound
+    }
+
+    /// Clears the achievement celebration once the UI has shown it.
+    func dismissAchievement() {
+        justUnlockedAchievement = nil
     }
 
     /// Updates and persists the daily focus goal.
@@ -449,10 +458,19 @@ class TimerManager: ObservableObject {
         var nextBreakIsLong = false
         if isFocusMode {
             let focusMinutes = Int(focusDuration / 60)
+            let statsBefore = statsSnapshot
             updateStats(focusMinutesCompleted: focusMinutes)
             historyStore.add(minutes: focusMinutes, on: Date())
             nextBreakIsLong = BreakPolicy.breakKind(completedTodaySessions: todaySessions) == .long
             isLongBreak = nextBreakIsLong
+
+            // Surface the first achievement newly earned by this session, so the
+            // UI can celebrate it. Uses the previously-dead newlyUnlocked logic.
+            if let unlockedID = AchievementEvaluator.newlyUnlocked(from: statsBefore, to: statsSnapshot).first,
+               let achievement = AchievementEvaluator.catalog.first(where: { $0.id == unlockedID }) {
+                justUnlockedAchievement = achievement
+                if externalServicesEnabled { Haptics.success() }
+            }
 
             // Log session to the backend
             let minutes = focusMinutes

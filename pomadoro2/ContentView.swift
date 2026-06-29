@@ -59,6 +59,17 @@ struct ContentView: View {
                     AppLockOverlay(appLockManager: timerManager.appLockManager)
                         .transition(.opacity.combined(with: .scale))
                 }
+
+                // Celebration when a focus session newly unlocks an achievement.
+                if let achievement = timerManager.justUnlockedAchievement {
+                    AchievementOverlay(achievement: achievement) {
+                        withAnimation(.easeInOut(duration: DesignTokens.Animation.standard)) {
+                            timerManager.dismissAchievement()
+                        }
+                    }
+                    .transition(.opacity.combined(with: .scale))
+                    .zIndex(1)
+                }
             }
         }
         .onAppear {
