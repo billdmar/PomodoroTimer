@@ -39,9 +39,9 @@ class TimerManager: ObservableObject {
     // App lock manager - Initialize it properly
     @Published var appLockManager = AppLockManager()
 
-    private let userDefaults = UserDefaults.standard
     private let settingsStore = SettingsStore()
     private let sessionStore = SessionStore()
+    private let statsPersistence = StatsPersistence()
     private var cancellables = Set<AnyCancellable>()
 
     // Deadline-based timing: while running, `endDate` is the source of truth and
@@ -376,55 +376,46 @@ class TimerManager: ObservableObject {
         sessionStore.clear()
     }
 
+    // MARK: - Stats
+
+    /// Bridges the view-facing @Published stats to the value model that the
+    /// pure StatsCalculator / StatsPersistence operate on.
+    private var statsState: StatsState {
+        get {
+            StatsState(
+                todayFocusMinutes: todayFocusMinutes,
+                totalFocusMinutes: totalFocusMinutes,
+                currentStreak: currentStreak,
+                lastCompletionDate: lastCompletionDate
+            )
+        }
+        set {
+            todayFocusMinutes = newValue.todayFocusMinutes
+            totalFocusMinutes = newValue.totalFocusMinutes
+            currentStreak = newValue.currentStreak
+            lastCompletionDate = newValue.lastCompletionDate
+        }
+    }
+
     private func loadLocalStats() {
-        todayFocusMinutes = userDefaults.integer(forKey: "todayFocusMinutes")
-        totalFocusMinutes = userDefaults.integer(forKey: "totalFocusMinutes")
-        currentStreak = userDefaults.integer(forKey: "currentStreak")
-
-        if let lastDate = userDefaults.object(forKey: "lastCompletionDate") as? Date {
-            lastCompletionDate = lastDate
+        var state = statsPersistence.load()
+        let reset = StatsCalculator.resettingForNewDay(state, now: Date())
+        if reset != state {
+            state = reset
+            statsPersistence.save(state)
         }
-
-        // Reset today's minutes if it's a new day
-        if checkIfNewDay() {
-            todayFocusMinutes = 0
-            userDefaults.set(todayFocusMinutes, forKey: "todayFocusMinutes")
-        }
+        statsState = state
     }
 
     private func updateStats(focusMinutesCompleted: Int) {
-        let now = Date()
-        let isNewDay = checkIfNewDay()
-
-        if isNewDay {
-            todayFocusMinutes = focusMinutesCompleted
-        } else {
-            todayFocusMinutes += focusMinutesCompleted
-        }
-
-        // Streak math lives in StreakCalculator so a multi-day gap correctly
-        // resets the streak instead of simply incrementing on any new day.
-        currentStreak = StreakCalculator.updatedStreak(
-            previousStreak: currentStreak,
-            lastCompletion: lastCompletionDate,
-            now: now
+        let updated = StatsCalculator.applyingCompletion(
+            statsState,
+            focusMinutes: focusMinutesCompleted,
+            now: Date()
         )
-
-        totalFocusMinutes += focusMinutesCompleted
-        lastCompletionDate = now
-
-        // Save locally
-        saveLocalStats()
-
-        // Save to Firebase
+        statsState = updated
+        statsPersistence.save(updated)
         syncWithFirebase()
-    }
-
-    private func saveLocalStats() {
-        userDefaults.set(todayFocusMinutes, forKey: "todayFocusMinutes")
-        userDefaults.set(totalFocusMinutes, forKey: "totalFocusMinutes")
-        userDefaults.set(currentStreak, forKey: "currentStreak")
-        userDefaults.set(lastCompletionDate, forKey: "lastCompletionDate")
     }
 
     private func syncWithFirebase() {
@@ -438,26 +429,18 @@ class TimerManager: ObservableObject {
         // Load stats from Firebase (in case user has data from other devices)
         firebaseManager.loadUserStats { [weak self] todayMinutes, totalMinutes, streak in
             DispatchQueue.main.async {
-                // Use the maximum values to handle multi-device sync
-                self?.todayFocusMinutes = max(self?.todayFocusMinutes ?? 0, todayMinutes)
-                self?.totalFocusMinutes = max(self?.totalFocusMinutes ?? 0, totalMinutes)
-                self?.currentStreak = max(self?.currentStreak ?? 0, streak)
-
-                // Save the updated values locally
-                self?.saveLocalStats()
+                guard let self else { return }
+                let remote = StatsState(
+                    todayFocusMinutes: todayMinutes,
+                    totalFocusMinutes: totalMinutes,
+                    currentStreak: streak
+                )
+                // Field-wise max reconciles values from other devices.
+                let merged = StatsCalculator.merging(self.statsState, remote: remote)
+                self.statsState = merged
+                self.statsPersistence.save(merged)
             }
         }
-    }
-
-    private func checkIfNewDay() -> Bool {
-        guard let lastDate = lastCompletionDate else {
-            return true
-        }
-
-        let calendar = Calendar.current
-        let today = Date()
-
-        return !calendar.isDate(lastDate, inSameDayAs: today)
     }
 
     private func requestNotificationPermission() {
@@ -559,7 +542,7 @@ class TimerManager: ObservableObject {
         totalFocusMinutes = 0
         currentStreak = 0
         lastCompletionDate = nil
-        saveLocalStats()
+        statsPersistence.save(statsState)
         syncWithFirebase()
         print("All stats reset to 0")
     }
@@ -587,7 +570,7 @@ class TimerManager: ObservableObject {
         currentStreak = 5
         lastCompletionDate = Date()
 
-        saveLocalStats()
+        statsPersistence.save(statsState)
         syncWithFirebase()
 
         print("Created 5 test sessions totaling 125 minutes")
