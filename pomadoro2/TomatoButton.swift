@@ -46,7 +46,7 @@ struct TomatoButton: View {
 
                         // Emoji - only show when not transitioning
                         Text(timerManager.currentEmoji)
-                            .font(.system(size: 80))
+                            .font(.system(size: DesignTokens.Typography.displaySize))
                     }
                 }
                 .onTapGesture {

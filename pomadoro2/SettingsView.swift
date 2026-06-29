@@ -20,22 +20,22 @@ struct SettingsView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     // Header
-                    VStack(spacing: 16) {
+                    VStack(spacing: DesignTokens.Spacing.md) {
                         Text(timerManager.currentEmoji)
-                            .font(.system(size: 50))
+                            .font(.system(size: DesignTokens.Typography.emojiSize))
 
                         Text("Timer Settings")
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
                     }
-                    .padding(.top, 30)
+                    .padding(.top, DesignTokens.Spacing.xxl)
                     .padding(.bottom, 40)
 
                     // Settings content
-                    VStack(spacing: 30) {
+                    VStack(spacing: DesignTokens.Spacing.xxl) {
                         // Focus duration setting
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
                             HStack {
                                 Image(systemName: "brain.head.profile")
                                     .foregroundColor(.red)
@@ -73,15 +73,15 @@ struct SettingsView: View {
                                     updateTimerSettings()
                                 }
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 20)
+                        .padding(.horizontal, DesignTokens.Spacing.xl)
+                        .padding(.vertical, DesignTokens.Spacing.lg)
                         .background(
-                            RoundedRectangle(cornerRadius: 16)
+                            RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.section)
                                 .fill(Color.gray.opacity(0.1))
                         )
 
                         // Break duration setting
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
                             HStack {
                                 Image(systemName: "cup.and.saucer")
                                     .foregroundColor(.green)
@@ -119,21 +119,21 @@ struct SettingsView: View {
                                     updateTimerSettings()
                                 }
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 20)
+                        .padding(.horizontal, DesignTokens.Spacing.xl)
+                        .padding(.vertical, DesignTokens.Spacing.lg)
                         .background(
-                            RoundedRectangle(cornerRadius: 16)
+                            RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.section)
                                 .fill(Color.gray.opacity(0.1))
                         )
 
                         // Quick emoji suggestions
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
                             Text("Quick Emojis")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                            HStack(spacing: 12) {
+                            HStack(spacing: DesignTokens.Spacing.sm) {
                                 Text("Focus:")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
@@ -154,7 +154,7 @@ struct SettingsView: View {
                                 Spacer()
                             }
 
-                            HStack(spacing: 12) {
+                            HStack(spacing: DesignTokens.Spacing.sm) {
                                 Text("Break:")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
@@ -175,15 +175,15 @@ struct SettingsView: View {
                                 Spacer()
                             }
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 16)
+                        .padding(.horizontal, DesignTokens.Spacing.xl)
+                        .padding(.vertical, DesignTokens.Spacing.md)
                         .background(
-                            RoundedRectangle(cornerRadius: 16)
+                            RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.section)
                                 .fill(Color.gray.opacity(0.05))
                         )
 
                         // Current mode (simplified from previous status section)
-                        VStack(spacing: 16) {
+                        VStack(spacing: DesignTokens.Spacing.md) {
                             Text("Current Mode")
                                 .font(.headline)
                                 .foregroundColor(.primary)
@@ -217,14 +217,14 @@ struct SettingsView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 20)
+                        .padding(.horizontal, DesignTokens.Spacing.xl)
+                        .padding(.vertical, DesignTokens.Spacing.lg)
                         .background(
-                            RoundedRectangle(cornerRadius: 16)
+                            RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.section)
                                 .fill(Color.gray.opacity(0.1))
                         )
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, DesignTokens.Spacing.lg)
 
                     Spacer()
 
@@ -237,14 +237,14 @@ struct SettingsView: View {
                             .font(.headline)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
+                            .padding(.vertical, DesignTokens.Spacing.md)
                             .background(
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card)
                                     .fill(Color.blue)
                             )
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 30)
+                    .padding(.horizontal, DesignTokens.Spacing.lg)
+                    .padding(.bottom, DesignTokens.Spacing.xxl)
                 }
             }
             .toolbar {

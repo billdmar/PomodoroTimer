@@ -18,9 +18,9 @@ struct LeaderboardView: View {
             VStack(spacing: 0) {
                 if !firebaseManager.isAuthenticated {
                     // Authentication required view
-                    VStack(spacing: 30) {
+                    VStack(spacing: DesignTokens.Spacing.xxl) {
                         Text("🔐")
-                            .font(.system(size: 80))
+                            .font(.system(size: DesignTokens.Typography.displaySize))
 
                         Text("Join the Community!")
                             .font(.title)
@@ -48,9 +48,9 @@ struct LeaderboardView: View {
                             .font(.headline)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
+                            .padding(.vertical, DesignTokens.Spacing.md)
                             .background(
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card)
                                     .fill(Color.blue)
                             )
                         }
@@ -71,7 +71,7 @@ struct LeaderboardView: View {
                 } else {
                     // Leaderboard content
                     if isLoading {
-                        VStack(spacing: 20) {
+                        VStack(spacing: DesignTokens.Spacing.lg) {
                             Spacer()
                             ProgressView()
                                 .scaleEffect(1.5)
@@ -82,11 +82,11 @@ struct LeaderboardView: View {
                         }
                     } else {
                         ScrollView {
-                            VStack(spacing: 20) {
+                            VStack(spacing: DesignTokens.Spacing.lg) {
                                 // Header
-                                VStack(spacing: 16) {
+                                VStack(spacing: DesignTokens.Spacing.md) {
                                     Text("🏆")
-                                        .font(.system(size: 50))
+                                        .font(.system(size: DesignTokens.Typography.emojiSize))
 
                                     Text("Global Leaderboard")
                                         .font(.title2)
@@ -97,11 +97,11 @@ struct LeaderboardView: View {
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
-                                .padding(.top, 30)
+                                .padding(.top, DesignTokens.Spacing.xxl)
                                 .padding(.bottom, 10)
 
                                 // Leaderboard entries
-                                LazyVStack(spacing: 12) {
+                                LazyVStack(spacing: DesignTokens.Spacing.sm) {
                                     ForEach(Array(leaderboardEntries.enumerated()), id: \.element.id) { index, entry in
                                         LeaderboardRow(
                                             rank: index + 1,
@@ -110,10 +110,10 @@ struct LeaderboardView: View {
                                         )
                                     }
                                 }
-                                .padding(.horizontal, 20)
+                                .padding(.horizontal, DesignTokens.Spacing.lg)
 
                                 if leaderboardEntries.isEmpty {
-                                    VStack(spacing: 16) {
+                                    VStack(spacing: DesignTokens.Spacing.md) {
                                         Text("🌱")
                                             .font(.system(size: 40))
 
@@ -202,7 +202,7 @@ struct LeaderboardRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: DesignTokens.Spacing.md) {
             // Rank badge
             ZStack {
                 Circle()
@@ -238,7 +238,7 @@ struct LeaderboardRow: View {
                     Spacer()
                 }
 
-                HStack(spacing: 16) {
+                HStack(spacing: DesignTokens.Spacing.md) {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
                             .font(.caption)
@@ -273,13 +273,13 @@ struct LeaderboardRow: View {
                     .foregroundColor(.secondary)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, DesignTokens.Spacing.md)
+        .padding(.vertical, DesignTokens.Spacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card)
                 .fill(isCurrentUser ? Color.blue.opacity(0.1) : Color.gray.opacity(0.05))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card)
                         .stroke(isCurrentUser ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
                 )
         )
