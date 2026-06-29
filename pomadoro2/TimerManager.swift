@@ -10,6 +10,7 @@ import SwiftUI
 import UserNotifications
 import AudioToolbox
 import Combine
+import WidgetKit
 
 class TimerManager: ObservableObject {
     @Published var isRunning = false
@@ -42,6 +43,7 @@ class TimerManager: ObservableObject {
     private let settingsStore = SettingsStore()
     private let sessionStore = SessionStore()
     private let statsPersistence = StatsPersistence()
+    private let sharedSessionStore = SharedSessionStore()
     private var cancellables = Set<AnyCancellable>()
 
     // Deadline-based timing: while running, `endDate` is the source of truth and
@@ -159,6 +161,19 @@ class TimerManager: ObservableObject {
         ))
     }
 
+    /// Mirrors the live session into the shared App Group suite and refreshes
+    /// the widget so the Home/Lock screen reflects the current timer.
+    private func publishSharedState() {
+        sharedSessionStore.save(SharedSessionState(
+            isRunning: isRunning,
+            isFocusMode: isFocusMode,
+            emoji: currentEmoji,
+            endDate: endDate,
+            timeRemaining: timeRemaining
+        ))
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
     var currentEmoji: String {
         return isFocusMode ? focusEmoji : breakEmoji
     }
@@ -199,6 +214,7 @@ class TimerManager: ObservableObject {
 
         scheduleCompletionNotification()
         saveSession()
+        publishSharedState()
         startTick()
         Haptics.medium()
     }
@@ -222,6 +238,7 @@ class TimerManager: ObservableObject {
 
         // Persist the paused state so it survives a quit.
         saveSession()
+        publishSharedState()
     }
 
     // MARK: - Tick & deadline
@@ -319,6 +336,7 @@ class TimerManager: ObservableObject {
         timeRemaining = isFocusMode ? focusDuration : breakDuration
         // Back to a fresh idle state — nothing to recover.
         sessionStore.clear()
+        publishSharedState()
         Haptics.light()
     }
 
@@ -377,6 +395,7 @@ class TimerManager: ObservableObject {
         // The completed session shouldn't be recovered on next launch; the
         // pauseTimer() above persisted a snapshot, so clear it here.
         sessionStore.clear()
+        publishSharedState()
     }
 
     // MARK: - Stats
