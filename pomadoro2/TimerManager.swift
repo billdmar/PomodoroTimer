@@ -344,7 +344,7 @@ class TimerManager: ObservableObject {
             updateStats(focusMinutesCompleted: focusMinutes)
 
             // Log session to Firebase
-            firebaseManager.logFocusSession(duration: focusMinutes)
+            Task { await firebaseManager.logFocusSession(duration: focusMinutes) }
         }
 
         isFocusMode.toggle()
@@ -401,26 +401,21 @@ class TimerManager: ObservableObject {
     }
 
     private func syncWithFirebase() {
-        // Save current stats to Firebase
-        firebaseManager.saveUserStats(
-            focusMinutes: todayFocusMinutes,
-            totalMinutes: totalFocusMinutes,
-            streak: currentStreak
-        )
+        Task { [weak self] in
+            guard let self else { return }
+            // Save current stats to Firebase.
+            await firebaseManager.saveUserStats(
+                focusMinutes: todayFocusMinutes,
+                totalMinutes: totalFocusMinutes,
+                streak: currentStreak
+            )
 
-        // Load stats from Firebase (in case user has data from other devices)
-        firebaseManager.loadUserStats { [weak self] todayMinutes, totalMinutes, streak in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                let remote = StatsState(
-                    todayFocusMinutes: todayMinutes,
-                    totalFocusMinutes: totalMinutes,
-                    currentStreak: streak
-                )
-                // Field-wise max reconciles values from other devices.
-                let merged = StatsCalculator.merging(self.statsState, remote: remote)
-                self.statsState = merged
-                self.statsPersistence.save(merged)
+            // Load stats from Firebase (in case the user has data from other
+            // devices) and reconcile. Field-wise max + latest completion date.
+            if let remote = await firebaseManager.loadUserStats() {
+                let merged = StatsCalculator.merging(statsState, remote: remote)
+                statsState = merged
+                statsPersistence.save(merged)
             }
         }
     }
@@ -502,21 +497,21 @@ class TimerManager: ObservableObject {
         print("DEBUG: Completing full session")
         let focusMinutes = Int(focusDuration / 60)
         updateStats(focusMinutesCompleted: focusMinutes)
-        firebaseManager.logFocusSession(duration: focusMinutes)
+        Task { await firebaseManager.logFocusSession(duration: focusMinutes) }
         print("Added \(focusMinutes) minutes to stats")
     }
 
     func debugCompletePartialSession() {
         print("DEBUG: Completing partial session (10 minutes)")
         updateStats(focusMinutesCompleted: 10)
-        firebaseManager.logFocusSession(duration: 10)
+        Task { await firebaseManager.logFocusSession(duration: 10) }
         print("Added 10 minutes to stats")
     }
 
     func debugAdd5Minutes() {
         print("DEBUG: Adding 5 minutes to stats")
         updateStats(focusMinutesCompleted: 5)
-        firebaseManager.logFocusSession(duration: 5)
+        Task { await firebaseManager.logFocusSession(duration: 5) }
         print("Added 5 minutes to stats")
     }
 
@@ -545,7 +540,7 @@ class TimerManager: ObservableObject {
 
         for session in testSessions {
             let sessionDate = Calendar.current.date(byAdding: .day, value: -session.daysAgo, to: Date()) ?? Date()
-            firebaseManager.logFocusSession(duration: session.duration, completedAt: sessionDate)
+            Task { await firebaseManager.logFocusSession(duration: session.duration, completedAt: sessionDate) }
         }
 
         // Update stats to reflect the test data
