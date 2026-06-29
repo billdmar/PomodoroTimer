@@ -65,6 +65,29 @@ struct TimerMathTests {
     @Test func fallsBackOnEmptyEmoji() {
         #expect(TimerMath.normalizedEmoji("", default: "🍅") == "🍅")
     }
+
+    // MARK: - remaining / hasCompleted (deadline-based countdown)
+
+    @Test func remainingCountsDownFromDeadline() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let end = now.addingTimeInterval(300)
+        #expect(TimerMath.remaining(until: end, now: now) == 300)
+        #expect(TimerMath.remaining(until: end, now: now.addingTimeInterval(100)) == 200)
+    }
+
+    @Test func remainingClampsPastDeadlineToZero() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let end = now.addingTimeInterval(60)
+        #expect(TimerMath.remaining(until: end, now: now.addingTimeInterval(120)) == 0)
+    }
+
+    @Test func hasCompletedOnlyAtOrPastDeadline() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let end = now.addingTimeInterval(60)
+        #expect(TimerMath.hasCompleted(endDate: end, now: now) == false)
+        #expect(TimerMath.hasCompleted(endDate: end, now: now.addingTimeInterval(60)) == true)
+        #expect(TimerMath.hasCompleted(endDate: end, now: now.addingTimeInterval(61)) == true)
+    }
 }
 
 struct StreakCalculatorTests {
