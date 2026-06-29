@@ -2,69 +2,100 @@
 
 This document describes how the Pomodoro Timer app is structured and how its
 pieces fit together. Every claim below is grounded in the Swift source under
-[`pomadoro2/`](../pomadoro2). It is meant as an orientation guide for anyone
-reading or extending the code.
+[`pomadoro2/`](../pomadoro2) and [`PomodoroWidget/`](../PomodoroWidget). It is
+meant as an orientation guide for anyone reading or extending the code.
 
 ## Overview
 
-The app is a single-screen SwiftUI iOS application following an MVVM-ish shape:
-SwiftUI `View`s observe a small set of `ObservableObject` "managers" that hold
-all mutable state and side effects. Pure, side-effect-free logic (time
-formatting, progress fraction, streak math) is factored out into plain `enum`
-namespaces so it can be unit-tested without constructing the Firebase-backed
-managers.
+The app is a SwiftUI iOS application following an MVVM-ish shape: SwiftUI
+`View`s observe a single `@MainActor` `ObservableObject` facade
+(`TimerManager`) that holds the user-facing mutable state. The interesting
+design choices are:
+
+- **The wall clock is the source of truth.** The countdown is *deadline-based*:
+  a running session stores its `endDate`, and `timeRemaining` / `isRunning` are
+  *derived* from an explicit `TimerState` enum. A lightweight async refresh loop
+  drives the UI only — it is not the clock — which is what makes the timer
+  immune to background suspension and tick drift.
+- **Pure logic and persistence are split out of the facade.** All deterministic
+  rules (time math, streaks, stats accumulation, break cadence, achievements,
+  goals, history aggregation) live in side-effect-free `enum`/`struct` types,
+  and all persistence lives in small stores that take an *injected*
+  `UserDefaults`. `TimerManager` itself takes dependency injection (a
+  `StatsBackend`, a `UserDefaults`, and an `enableExternalServices` flag), so
+  its state machine is unit-testable without touching Firebase, notifications,
+  or Live Activities.
+- **Out-of-process surfaces talk to the app through a shared App Group.** App
+  Intents / Siri, the Control Center control, the widget, and the Live Activity
+  run in separate processes and communicate via the App Group suite
+  (`PendingCommandStore` for commands in, `SharedSessionState` for state out).
 
 | Layer | Types | Responsibility |
 | --- | --- | --- |
-| App entry | `pomadoro2App`, `AppDelegate` | Configure Firebase, host the root view |
-| Views | `ContentView`, `SettingsView`, `StatsView`, `LeaderboardView`, `TomatoButton`, `StarParticlesView` | Presentation, animation, user input |
-| View models / managers | `TimerManager`, `EnhancedAppLockManager` (aliased `AppLockManager`), `FirebaseManager` | Mutable state, timers, OS integration, networking |
-| Pure logic | `TimerMath`, `StreakCalculator` | Deterministic, unit-tested helpers |
-| Utility | `Log` | Debug-only logging that compiles out of Release |
+| App entry | `pomadoro2App`, `AppDelegate` | Configure Firebase, register notification actions, host the root view |
+| Views | `ContentView`, `SettingsView`, `StatsView`, `LeaderboardView`, `WelcomeView`, plus extracted components (`ProgressRingView`, `DynamicBackgroundView`, `TimerComponents`, `HistoryChartView`, `TomatoButton`, `StarParticlesView`) | Presentation, animation, user input |
+| Facade / view model | `TimerManager` (`@MainActor`), `FirebaseManager`, `EnhancedAppLockManager` (aliased `AppLockManager`) | Orchestration, OS integration, networking |
+| Pure logic | `TimerMath`, `StreakCalculator`, `StatsCalculator`, `BreakPolicy`, `AchievementEvaluator`, `GoalMath`, `HistoryAggregator`, `SessionRecovery` | Deterministic, unit-tested helpers |
+| State model | `TimerState` (+ `TimerConstants`), `StatsState`, `SessionSnapshot`, `SharedSessionState`, `PendingCommand` | Value types the logic and stores operate on |
+| Persistence | `SettingsStore`, `SessionStore`, `StatsPersistence`, `GoalStore`, `DailyHistoryStore`, `AppearanceSettingsStore`, `SharedSessionStore`, `PendingCommandStore` | Load/save to injectable `UserDefaults` (some via the App Group suite) |
+| OS surfaces | `LiveActivityController`, `ScreenTimeController`, `NotificationActions`, `PomodoroIntents` | Live Activity, Screen Time shielding, interactive notifications, App Intents |
+| Design system | `DesignTokens`, `CardModifiers` (`.cardStyle()`) | Centralized palette/typography/spacing/radius/shadow/animation |
+| Widget extension | `PomodoroWidget`, `PomodoroLiveActivity`, `PomodoroControl`, `PomodoroWidgetBundle` | Home/Lock-screen widget, Live Activity UI, Control Center control |
+| Utility | `Log`, `Haptics`, `MotivationalContent` | Debug-only logging, haptics, copy |
 | Backend | Firestore + `firestore.rules` | Persisted stats, focus-session log, global leaderboard |
 
 ## Component & data-flow diagram
 
 ```
-                         ┌──────────────────────────────┐
-                         │        pomadoro2App           │
-                         │  @UIApplicationDelegateAdaptor │
-                         │  AppDelegate.didFinishLaunching│
-                         │   → FirebaseApp.configure()    │
-                         └───────────────┬───────────────┘
-                                         │ hosts
-                                         ▼
-                         ┌──────────────────────────────┐
-                         │          ContentView          │
-                         │  @StateObject TimerManager     │
-                         │  Welcome → main ↔ full-screen  │
-                         └───┬───────────┬───────────┬───┘
-            .sheet           │           │           │  reads progress / time / mode
-        ┌────────────────────┘           │           └───────────────┐
-        ▼                                ▼                            ▼
-┌───────────────┐   ┌──────────────────────────────┐      ┌────────────────────┐
-│ SettingsView  │   │         TimerManager          │      │ AppLockOverlay /    │
-│ 1–60 / 1–30   │──▶│  @Published isRunning,         │◀────▶│ EnhancedAppLock     │
-│ sliders,emoji │   │  timeRemaining, isFocusMode,   │ lock │ Manager             │
-└───────────────┘   │  durations, local stats        │      │ (bg/fg observers,   │
-┌───────────────┐   │  Timer (1 Hz) ─ TimerMath      │      │  return notifs)     │
-│  StatsView    │◀──│  StreakCalculator (streak)     │      └────────────────────┘
-│ streak cal.   │   └───────────────┬───────────────┘
-└───────────────┘                   │ on focus-session complete
-┌───────────────┐                   ▼
-│LeaderboardView│         ┌──────────────────────────────┐
-│ top-N board   │◀───────▶│        FirebaseManager        │
-└───────────────┘ getLB   │  Auth (anon), Firestore I/O,   │
-                          │  NWPathMonitor (online state)  │
-                          └───────────────┬───────────────┘
-                                          │ read / write
+                         ┌───────────────────────────────────┐
+                         │            pomadoro2App            │
+                         │  @UIApplicationDelegateAdaptor      │
+                         │  AppDelegate.didFinishLaunching:     │
+                         │   FirebaseApp.configure()           │
+                         │   NotificationActions.register…     │
+                         └────────────────┬────────────────────┘
+                                          │ hosts
                                           ▼
-                          ┌──────────────────────────────┐
-                          │   Firebase Cloud Firestore     │
-                          │  userStats/{uid}  (public read)│
-                          │  focusSessions/* (append-only) │
-                          │   guarded by firestore.rules   │
-                          └──────────────────────────────┘
+                         ┌───────────────────────────────────┐
+                         │             ContentView             │
+                         │  @StateObject TimerManager           │
+                         │  Welcome → main ↔ full-screen        │
+                         │  .onChange(scenePhase) → recompute    │
+                         └──┬──────────────┬───────────────┬───┘
+        .sheet              │              │               │  reads progress / time / mode
+   ┌────────────────────────┘              │               └────────────────┐
+   ▼                                        ▼                                 ▼
+┌───────────────┐   ┌────────────────────────────────────────┐    ┌────────────────────┐
+│ SettingsView  │   │           TimerManager (@MainActor)      │    │ AppLockOverlay /    │
+│ durations,    │──▶│  facade — DI: StatsBackend, UserDefaults, │◀──▶│ EnhancedAppLock     │
+│ emoji, theme, │   │  enableExternalServices                   │lock│ Manager + ScreenTime│
+│ sound, goal   │   │  @Published isRunning, timeRemaining …    │    │ (nudges + shielding)│
+├───────────────┤   │                                            │    └────────────────────┘
+│  StatsView    │◀──│  private var state: TimerState             │
+│ goal ring,    │   │   .idle / .running(endDate) / .paused      │
+│ streak cal,   │   │  tickTask (0.25s) → recompute() (UI only)  │
+│ achievements, │   │  delegates to pure logic + stores …        │
+│ history chart │   └───┬──────────┬──────────┬──────────┬───────┘
+├───────────────┤       │          │          │          │
+│LeaderboardView│◀──────┘ logic    │ stores   │ OS        │ App Group
+└──────┬────────┘  StatsCalculator │ Settings │ Live      │ PendingCommandStore (in)
+       │           StreakCalc      │ Session  │ Activity  │ SharedSessionStore  (out)
+       │ leaderboard()             │ Stats    │ ScreenTime │        ▲          │
+       ▼                           │ Goal     │ Notif.     │        │          ▼
+┌───────────────────────────┐      │ History  │            │   ┌─────────────────────────┐
+│  FirebaseManager           │      │ Appearance            │   │ App Intents / Siri /     │
+│  : StatsBackend (async)    │      └──────────┘            │   │ Control Center / Widget  │
+│  Auth (anon), Firestore,   │                              │   │ + Live Activity render   │
+│  NWPathMonitor (isOnline)  │                              │   └─────────────────────────┘
+└────────────┬───────────────┘
+             │ read / write
+             ▼
+┌───────────────────────────────┐
+│   Firebase Cloud Firestore     │
+│  userStats/{uid}  (public read)│
+│  focusSessions/* (create-only) │
+│   guarded by firestore.rules   │
+└───────────────────────────────┘
 ```
 
 ## App entry & structure
@@ -72,239 +103,324 @@ managers.
 `pomadoro2App` ([`pomadoro2App.swift`](../pomadoro2/pomadoro2App.swift)) is the
 `@main` SwiftUI `App`. It registers an `AppDelegate` via
 `@UIApplicationDelegateAdaptor`; the delegate's
-`application(_:didFinishLaunchingWithOptions:)` calls
-`FirebaseApp.configure()` so Firebase is initialized before any view appears.
-The single `WindowGroup` hosts `ContentView`.
+`application(_:didFinishLaunchingWithOptions:)` calls `FirebaseApp.configure()`,
+installs `NotificationActionHandler.shared` as the notification-center delegate,
+and registers the interactive completion category (`NotificationActions
+.registerCategories()`). The single `WindowGroup` hosts `ContentView`.
 
 `ContentView` ([`ContentView.swift`](../pomadoro2/ContentView.swift)) owns the
-app's only `@StateObject TimerManager` and drives all top-level UI state. It
-renders one of several states:
+app's only `@StateObject TimerManager` and drives top-level UI state. It renders
+one of several states:
 
-- A multi-step **`WelcomeView`** onboarding flow shown on first appearance.
-  It is skipped when the process is launched with the `-skipWelcome` argument,
-  which the UI tests use to land deterministically on the timer screen.
-- The **`mainTimerView`** (idle/paused state): header, three `QuickStatCard`s
-  (today's focus, day streak, total minutes), the progress-ring timer, and a
-  row of `ControlButton`s (reset, skip/switch, leaderboard, settings).
-- The **`fullScreenTimerView`** (running state): an immersive view with an
-  encouraging message, large monospaced time, the progress ring around the
-  current emoji, mode indicator, and floating Restart/Skip buttons.
+- A multi-step **`WelcomeView`** onboarding flow on first appearance, skipped
+  when launched with the `-skipWelcome` argument (used by UI tests to land
+  deterministically on the timer).
+- The **`mainTimerView`** (idle/paused): header, three `QuickStatCard`s, the
+  `ProgressRingView`, and a row of `ControlButton`s (reset, skip/switch,
+  leaderboard, settings).
+- The **`fullScreenTimerView`** (running): an immersive view over
+  `DynamicBackgroundView`, with an encouraging message, large monospaced time,
+  the progress ring around the current emoji, mode indicator, and floating
+  Restart/Skip buttons.
 
-`ContentView` also wires up `.sheet`s for `SettingsView`, `StatsView`, and
-`LeaderboardView`, and a `.onAppear` deep-link handler: a `-screen
-settings|leaderboard|stats` launch argument opens the corresponding sheet
-(used for deterministic screenshots/tests). A `#if DEBUG` overlay exposes a
-"🐛" debug panel with buttons that call the `TimerManager` debug methods.
+It wires `.sheet`s for `SettingsView`, `StatsView`, and `LeaderboardView`, a
+`-screen settings|leaderboard|stats` deep-link launch argument (for
+deterministic screenshots/tests), and — importantly — an
+`.onChange(of: scenePhase)` that forwards the new phase to
+`TimerManager.handleScenePhase(_:)` (the foreground recompute / background
+snapshot hook described below). A `#if DEBUG` overlay exposes a "🐛" panel that
+calls the `TimerManager` debug methods.
 
-Note: `TomatoButton` ([`TomatoButton.swift`](../pomadoro2/TomatoButton.swift))
-exists and is fully implemented (button + star burst on tap), but the live
-`ContentView` renders the tomato/emoji inline rather than embedding
-`TomatoButton`. `TomatoButton` is effectively a standalone/alternate component
-in the current screen composition — see "Interactive tomato & particles" below.
+`ContentView` renders the tomato/emoji inline and starts the timer by tapping
+the ring. `TomatoButton` ([`TomatoButton.swift`](../pomadoro2/TomatoButton.swift))
+and `StarParticlesView` are fully implemented, reusable components but are not
+the live tap target in the current screen composition.
 
-## Timer state machine
+## Timer engine: deadline-based state machine
 
-All timer state lives in `TimerManager`
-([`TimerManager.swift`](../pomadoro2/TimerManager.swift)), an `ObservableObject`.
-Key `@Published` state: `isRunning`, `timeRemaining` (`TimeInterval`),
-`isFocusMode`, `isLocked`, plus the configurable `focusDuration` (default
-`25 * 60`) and `breakDuration` (default `5 * 60`).
+This is the core of the app and the part that changed most. The countdown is
+modeled as an explicit state machine in
+[`TimerState.swift`](../pomadoro2/TimerState.swift):
 
-The session is a two-state machine — **focus** and **break** — tracked by the
-`isFocusMode` boolean:
+```swift
+enum TimerState: Equatable {
+    case idle(remaining: TimeInterval)   // stopped, ready to start
+    case running(endDate: Date)          // counting down toward a wall-clock deadline
+    case paused(remaining: TimeInterval) // frozen mid-session
+}
+```
 
-- **`startTimer()`** invalidates any existing timer, sets `isRunning = true`
-  and `isLocked = true`, picks a random encouraging message, and — only when
-  `isFocusMode` is true — calls `appLockManager.lockApp()`. It then schedules a
-  repeating 1-second `Timer` that decrements `timeRemaining`; when it reaches 0
-  it calls `timerCompleted()`.
-- **`pauseTimer()`** clears `isRunning`/`isLocked`, invalidates the timer, and
-  calls `appLockManager.unlockApp()`.
-- **`timerCompleted()`** pauses, builds a completion message, plays a system
-  sound (`AudioServicesPlaySystemSound(1005)`), sends a local notification,
-  unlocks the app, and — **only if the completed session was a focus session** —
-  records stats locally and logs the session to Firebase. It then flips
-  `isFocusMode` and sets `timeRemaining` to the next mode's duration. This is
-  the focus ↔ break transition.
-- **`switchMode()`** pauses, toggles `isFocusMode`, and resets `timeRemaining`
-  to the new mode's duration (no auto-start).
-- **`skipTimer()`**: if running, pauses, toggles mode, resets the time, and
-  immediately starts again; if not running, it calls `timerCompleted()`.
-- **`resetTimer()`** pauses and resets `timeRemaining` to the current mode's
-  full duration. **`restartCurrentTimer()`** pauses, resets, and restarts.
+The previous design combined an `endDate: Date?` with a separate `isRunning`
+flag, which allowed contradictory states. The enum makes illegal states
+unrepresentable, and crucially **a running session stores only its `endDate`**.
+Everything visible is derived from it:
 
-Derived values are delegated to the pure `TimerMath` enum
-([`TimerMath.swift`](../pomadoro2/TimerMath.swift)):
+- `state.remaining(now:)` computes seconds left from the wall clock when
+  running (delegating to `TimerMath.remaining(until:now:)`), or returns the
+  stored value when idle/paused.
+- `state.hasCompleted(now:)` is simply `now >= endDate`
+  (`TimerMath.hasCompleted(endDate:now:)`).
 
-- `formattedTime` → `TimerMath.formattedTime`, which renders `mm:ss` and clamps
-  negatives to zero.
-- `progress` → `TimerMath.progress(timeRemaining:total:)`, the elapsed fraction
-  in `0...1`, guarded against division by zero.
+`TimerManager` keeps `private var state: TimerState`; its `didSet` mirrors
+`isRunning = state.isRunning`. The `@Published var timeRemaining` the views bind
+to is recomputed from the deadline, not decremented.
 
-### Customizable durations (1–60 / 1–30)
+### Why this is background-safe
+
+A `tickTask` — a single `Task` sleeping `TimerConstants.tickInterval` (0.25s)
+between iterations — only calls `recompute()` to refresh `timeRemaining` for a
+smooth ring. It is explicitly **not** the clock. Because completion is decided
+by `Date >= endDate`, a delayed, throttled, or entirely skipped tick (e.g.
+while the app is suspended in the background) never loses or gains time:
+
+- `recompute()` recomputes `timeRemaining` from `state` and, if the deadline has
+  passed, calls `timerCompleted()`. It is the single completion path, shared by
+  the tick and by foreground/recovery.
+- `handleScenePhase(_:)` calls `recompute()` on `.active` (recovering any time
+  that elapsed while suspended, completing the session if its deadline passed)
+  and persists a `SessionSnapshot` on `.background`.
+
+`TimerConstants` ([`TimerState.swift`](../pomadoro2/TimerState.swift)) names the
+tunables (default focus 25m / break 5m / long break 15m, the 0.25s tick, the
+completion-notification id) rather than scattering magic numbers.
+
+### Lifecycle operations
+
+- **`startTimer()`** anchors `endDate = now + timeRemaining`, sets
+  `state = .running(endDate:)`, locks the app during focus mode (and lazily
+  requests Screen Time authorization), snapshots the session, publishes shared
+  state to the App Group, schedules a completion notification, starts the Live
+  Activity, and starts the tick.
+- **`pauseTimer()`** freezes `timeRemaining` from `state` directly (not via
+  `recompute()`, so pausing never accidentally triggers completion), moves to
+  `.paused`, stops the tick, unlocks, snapshots, and cancels the notification /
+  ends the Live Activity.
+- **`timerCompleted()`** pauses, plays the chosen completion sound + haptic,
+  unlocks, and — only for a completed *focus* session — records stats, appends
+  to the daily history, decides whether the next break is long
+  (`BreakPolicy`), and logs the session to the backend. It then flips
+  `isFocusMode` and moves to `.idle` with the next mode's duration.
+- **`resetTimer()` / `restartCurrentTimer()` / `switchMode()` / `skipTimer()`**
+  behave as their names suggest, always re-deriving the idle remaining from the
+  active mode's duration.
+- **`extend(byMinutes:)`** adds time to a running, paused, or idle session
+  (re-anchoring the deadline and rescheduling the notification / Live Activity
+  when running). It is wired to the notification's "Extend +5 min" action via
+  `NotificationActions.extendRequested`.
+
+`TimerMath` ([`TimerMath.swift`](../pomadoro2/TimerMath.swift)) holds the pure
+helpers: `formattedTime` (`mm:ss`, **rounds up** so a deadline countdown shows a
+whole `25:00` at the start rather than flashing `24:59`), `progress`,
+`normalizedEmoji`, and the `remaining`/`hasCompleted` deadline primitives.
+
+### Customizable settings
 
 `SettingsView` ([`SettingsView.swift`](../pomadoro2/SettingsView.swift)) exposes
-two sliders: **focus duration** with range `1...60` (step 1) and **break
-duration** with range `1...30` (step 1), plus inline emoji editors capped at two
-characters and quick-pick emoji rows. On any change it calls
-`TimerManager.updateSettings(focusMinutes:breakMinutes:focusEmoji:breakEmoji:)`,
-which multiplies the minute values by 60 into `focusDuration`/`breakDuration`,
-normalizes the emoji via `TimerMath.normalizedEmoji` (falling back to 🍅 / 😌
-when cleared), and — if the timer isn't currently running — updates
-`timeRemaining` live so the displayed time reflects the new setting. "Cancel"
-restores the manager's existing values.
+focus/break/long-break durations, focus/break emoji editors, accent **theme**,
+**appearance mode** (light/dark/system), and **completion sound**.
+Duration/emoji changes go through
+`TimerManager.updateSettings(focusMinutes:breakMinutes:focusEmoji:breakEmoji:longBreakMinutes:)`,
+which persists via `SettingsStore` and live-updates the idle remaining when the
+timer isn't running. Theme/appearance/sound go through `updateAppearance(...)`
+(persisted via `AppearanceSettingsStore`); the daily goal is set from
+`StatsView` via `setDailyGoal(minutes:)` (persisted via `GoalStore`).
 
-## Animated progress ring
+## Dependency injection & testability
 
-The progress ring is a SwiftUI `Circle().trim(from: 0, to: timerManager.progress)`
-with a rounded-cap gradient stroke, rotated `-90°` so it fills from the top, and
-animated with `.easeInOut`. It appears twice:
+`TimerManager` is an `@MainActor ObservableObject`. Its designated initializer is
 
-- In `mainTimerView`, layered with an outer radial glow and a shadowed
-  background circle, with the `mm:ss` time and a mode capsule centered inside.
-- In `fullScreenTimerView`, drawn around the central emoji as a white ring over
-  a faint track, sized relative to the `GeometryProxy`.
+```swift
+init(firebaseManager: FirebaseManager = FirebaseManager(),
+     backend: StatsBackend? = nil,
+     defaults: UserDefaults = .standard,
+     enableExternalServices: Bool = true)
+```
 
-The stroke colors are mode-aware (red/orange gradient for focus, green/mint for
-break). The whole running screen also has an animated multi-layer gradient
-background (`dynamicColorBackground`) whose gradient anchor points are driven by
-a `colorShift` value advanced every 3 seconds via a `Timer.publish`.
+All dependencies default to production, so `TimerManager()` just works for the
+app. Tests inject a **mock `StatsBackend`**, an **isolated `UserDefaults`
+suite**, and `enableExternalServices: false`. When external services are
+disabled, Firebase auth/sync, notification-permission prompts, and Live Activity
+calls are skipped, so the state machine runs in pure isolation and its
+transitions can be asserted deterministically.
 
-## Focus-mode lock
+Internally `TimerManager` constructs the persistence stores from the injected
+`defaults` and delegates all rules to the pure logic types — it is a facade, not
+a monolith.
 
-The lock is implemented by `EnhancedAppLockManager`
-([`AppLockManager.swift`](../pomadoro2/AppLockManager.swift)), exposed under the
-`typealias AppLockManager`. `TimerManager` owns an instance and only locks
-during **focus** sessions (`startTimer()` guards on `isFocusMode`).
+## Pure logic + persistence split
 
-`lockApp()` sets `isAppLocked`, records a start time, disables the idle timer
-(`UIApplication.shared.isIdleTimerDisabled = true`) so the screen won't sleep,
-and registers interactive notification categories. The manager observes
-`didEnterBackgroundNotification` / `willEnterForegroundNotification`:
+**Pure logic** (no UIKit, no persistence; `now`/`calendar` are injected for
+deterministic tests):
 
-- On **background** while locked: it sends an immediate "return to focus"
-  notification and schedules escalating follow-up reminders at 30s, 2m, 5m, and
-  10m.
-- On **foreground** while locked: if the user was away more than ~30 seconds it
-  sets `showingUnlockAlert = true` (and increments `unlockAttempts`), then
-  cancels pending notifications.
+- `TimerMath` — time formatting, progress, deadline math.
+- `StreakCalculator` ([`StreakCalculator.swift`](../pomadoro2/StreakCalculator.swift)) —
+  day-boundary streak rules + `isActiveDay(...)` for the streak calendar.
+- `StatsCalculator` (in [`StatsStore.swift`](../pomadoro2/StatsStore.swift)) —
+  new-day reset, applying a completion, and multi-device `merging` (field-wise
+  `max`, with the later `lastCompletionDate` winning).
+- `BreakPolicy` ([`BreakPolicy.swift`](../pomadoro2/BreakPolicy.swift)) —
+  long break every Nth focus session (default 4).
+- `AchievementEvaluator` ([`Achievements.swift`](../pomadoro2/Achievements.swift)) —
+  the badge catalog + `evaluate` / `newlyUnlocked` from a `StatsState`.
+- `GoalMath` (in [`GoalStore.swift`](../pomadoro2/GoalStore.swift)) — daily-goal
+  progress fraction + `isMet`.
+- `HistoryAggregator` (in [`DailyHistoryStore.swift`](../pomadoro2/DailyHistoryStore.swift)) —
+  windowed per-day focus totals for the charts.
+- `SessionRecovery` (in [`SessionStore.swift`](../pomadoro2/SessionStore.swift)) —
+  decides resume/expired/none for an interrupted session from elapsed wall time.
 
-`ContentView` renders `AppLockOverlay` (a blurred "Focus Session Active" prompt
-with a "Return to Focus" button) when `isAppLocked && showingUnlockAlert`.
-`unlockApp()` clears the lock state, re-enables the idle timer, and removes
-pending notifications.
+**Persistence stores** (each takes an injectable `UserDefaults`):
 
-This is an in-app retention/nudge mechanism — it does **not** block other apps
-at the OS level. The manager honestly acknowledges this: it also carries some
-auxiliary, currently-unsurfaced helpers — a `distractingApps`/`blockedApps`
-list with add/remove + `UserDefaults` persistence, a `suggestScreenTimeSetup()`
-string pointing users at iOS Screen Time for true system-wide blocking, and
-`getMotivationalMessage()` — that are defined but not wired into the live UI.
+- `SettingsStore` — durations + emoji + long-break length.
+- `SessionStore` — `SessionSnapshot` for crash/quit recovery.
+- `StatsPersistence` — the `StatsState` fields.
+- `GoalStore` — daily goal minutes.
+- `DailyHistoryStore` — JSON day→minutes map for the history charts.
+- `AppearanceSettingsStore` — accent / appearance / sound.
+- `SharedSessionStore` and `PendingCommandStore` — write to the **App Group**
+  suite (`SharedConfig.defaults`, falling back to `.standard` until the App
+  Group is configured) so the widget and out-of-process intents can see them.
 
-## Interactive tomato & particle effects
+`StatsState` is the value model `StatsCalculator` / `StatsPersistence` operate
+on; `TimerManager` exposes it via a private `statsState` get/set that bridges
+the individual `@Published` fields the views bind to.
 
-`TomatoButton` ([`TomatoButton.swift`](../pomadoro2/TomatoButton.swift)) is a
-tappable tomato/emoji button: on press it scales down slightly, calls
-`StarParticlesView`, and starts the timer; stars are hidden again after ~2s.
-`StarParticlesView`
-([`StarParticlesView.swift`](../pomadoro2/StarParticlesView.swift)) lays out 12
-emoji (✨ / ⭐ / 💫) in a ring using trig-based offsets and animates them
-outward with scale, opacity, and a 360° rotation, staggered by index.
-
-In the current `ContentView`, the tomato/emoji is rendered inline (a large
-`Text(timerManager.currentEmoji)` with spring/scale animation) and the timer is
-started by tapping the timer ring; in the running full-screen view, tapping the
-emoji pauses, and a long-press toggles a small hover offset. `TomatoButton`
-itself is implemented but not the live tap target — treat it as a reusable
-component rather than the active button.
-
-## Stats tracking
-
-`TimerManager` keeps local stats: `todayFocusMinutes`, `totalFocusMinutes`,
-`currentStreak`, and `lastCompletionDate`, persisted to `UserDefaults`
-(`loadLocalStats()` / `saveLocalStats()`). On focus-session completion,
-`updateStats(focusMinutesCompleted:)`:
-
-- Resets or accumulates `todayFocusMinutes` depending on whether it's a new
-  calendar day (`checkIfNewDay()`).
-- Recomputes `currentStreak` via the pure `StreakCalculator.updatedStreak(...)`.
-- Adds to `totalFocusMinutes`, stamps `lastCompletionDate`, saves locally, then
-  syncs to Firebase.
-
-`StreakCalculator` ([`StreakCalculator.swift`](../pomadoro2/StreakCalculator.swift))
-holds the day-boundary logic, separated for testability:
-first-ever completion → 1; same calendar day → unchanged; next calendar day →
-+1; a gap of two+ days (or clock moving backward) → reset to 1. It also provides
-`isActiveDay(...)`, which reconstructs which days are "lit" by treating the most
-recent `currentStreak` days ending on `lastCompletion` as active.
-
-`StatsView` ([`StatsView.swift`](../pomadoro2/StatsView.swift)) renders today's
-stat cards, a Duolingo-style **streak calendar** (`CompactStreakCalendarView`)
-that shades active days using `StreakCalculator.isActiveDay` — so the calendar
-and the streak badge can never disagree — and a grid of achievement badges whose
-unlock thresholds are derived from `totalFocusMinutes` / `todayFocusMinutes` /
-`currentStreak`.
-
-## Firebase Firestore leaderboard
+## Backend
 
 `FirebaseManager` ([`FirebaseManager.swift`](../pomadoro2/FirebaseManager.swift))
-is the only networking layer. It wraps Firebase Auth and Firestore and tracks
-connectivity with `NWPathMonitor` (`isOnline`); all writes/reads short-circuit
-when offline. Authentication is **anonymous**: `TimerManager.setupFirebase()`
-calls `signInAnonymously()` at launch (silently — launch failures aren't shown),
-while `LeaderboardView`'s "Join Anonymously" button calls it with
-`userInitiated: true` so failures surface as a friendly message.
+is the only networking layer and now conforms to a `StatsBackend` protocol:
+
+```swift
+protocol StatsBackend: AnyObject {
+    func saveUserStats(focusMinutes: Int, totalMinutes: Int, streak: Int) async
+    func loadUserStats() async -> StatsState?
+    func leaderboard(limit: Int) async -> [LeaderboardEntry]
+    func logFocusSession(duration: Int, completedAt: Date) async
+}
+```
+
+The protocol is `async/await` throughout, so `TimerManager` depends on the
+abstraction and tests can substitute an in-memory mock. `FirebaseManager` wraps
+Firebase Auth and Firestore, tracks connectivity with `NWPathMonitor`
+(`isOnline`), and short-circuits all reads/writes when offline. Authentication
+is **anonymous**: `setupFirebase()` signs in silently at launch and re-syncs on
+auth change; `LeaderboardView`'s "Join Anonymously" button signs in with
+`userInitiated: true` so failures surface a friendly message.
 
 ### Data model (Firestore)
 
-- **`userStats/{uid}`** — one document per user, keyed by auth uid. Fields:
-  `userId`, `todayFocusMinutes`, `totalFocusMinutes`, `currentStreak`,
-  `lastUpdated` (`serverTimestamp`), `lastCompletionDate`. Written with
-  `merge: true` by `saveUserStats(...)` and read by `loadUserStats(...)`.
+- **`userStats/{uid}`** — one document per user. Fields: `userId`,
+  `todayFocusMinutes`, `totalFocusMinutes`, `currentStreak`, `lastUpdated`
+  (`serverTimestamp`), `lastCompletionDate`. Written with `merge: true`.
 - **`focusSessions/*`** — append-only log, one document per completed focus
-  session: `userId`, `duration` (minutes), `completedAt`, `timestamp`
-  (`serverTimestamp`). Written by `logFocusSession(duration:completedAt:)`.
+  session: `userId`, `duration` (minutes), `completedAt`, `timestamp`. The
+  client only ever *writes* this collection.
 
-### How scores are written and read
+### Multi-device sync
 
-- **Write:** on focus-session completion, `TimerManager` calls
-  `firebaseManager.logFocusSession(...)` and then `syncWithFirebase()`, which
-  calls `saveUserStats(...)` to upsert the user's aggregate `userStats` document.
-- **Read (own stats):** `syncWithFirebase()` also calls `loadUserStats(...)` and
-  merges remote values via `max(...)` to handle multi-device sync.
-- **Read (leaderboard):** `getLeaderboard(limit:)` queries the `userStats`
-  collection ordered by `totalFocusMinutes` descending, limited to top-N
-  (default 10), mapping each document into a `LeaderboardEntry`
-  (`userId`, `totalMinutes`, `streak`, `lastActive`). `LeaderboardEntry`
-  derives a `displayName` ("Pomodoro Master " + first 6 chars of the uid, since
-  users are anonymous) and a human `formattedMinutes`.
+On completion, `TimerManager` calls `logFocusSession(...)` then `syncWithFirebase()`,
+which `saveUserStats(...)` (upsert), `loadUserStats(...)` (pull), and reconciles
+local vs. remote via `StatsCalculator.merging(...)` — **field-wise `max` plus the
+latest completion date** — so the streak math never recalculates against a stale
+local date.
 
+`getLeaderboard` / `leaderboard(limit:)` queries `userStats` ordered by
+`totalFocusMinutes` descending, mapping each document into a `LeaderboardEntry`
+(which derives an anonymous `displayName` and a human `formattedMinutes`).
 `LeaderboardView` ([`LeaderboardView.swift`](../pomadoro2/LeaderboardView.swift))
-shows a "Join the Community!" prompt when unauthenticated, otherwise loads the
-board, renders ranked `LeaderboardRow`s (🥇🥈🥉 for the top three, highlighting
-the current user), and supports pull-to-refresh.
+renders ranked rows with pull-to-refresh, prompting to join when unauthenticated.
 
 ### Security rules
 
-[`firestore.rules`](../firestore.rules) enforces least privilege and is the real
-access-control boundary (not the bundled client config):
+[`firestore.rules`](../firestore.rules) is the real access-control boundary (not
+the bundled client config) and enforces least privilege:
 
 - `userStats/{userId}`: **public read** (so any client can render the board);
   **write only by the authenticated owner** (`request.auth.uid == userId`) and
-  only when the numeric fields validate as non-negative ints
-  (`isValidUserStats`).
+  only when the numeric fields validate as non-negative ints.
 - `focusSessions/{sessionId}`: **create-only** by the authenticated owner, with
-  `duration` validated as an int in `0...1440`; **no read/update/delete**.
+  `duration` validated as an int in `0...1440`; **no read/update/delete** — this
+  is why the history charts read from the local `DailyHistoryStore` rather than
+  querying the collection back.
 - A catch-all `match /{document=**}` denies everything else.
+
+## Feature subsystems
+
+- **Long-break cadence** — `BreakPolicy` decides a long break after every Nth
+  focus session (default 4), using today's completed-session count. The next
+  break's length is `longBreakDuration` vs. `breakDuration` accordingly.
+- **Achievements** — `AchievementEvaluator.catalog` defines milestone badges
+  (first session, 5/day, 7- and 30-day streaks, 100 sessions, 1000 minutes)
+  with conditions over `StatsState`; `StatsView` renders `evaluate(...)`.
+- **Daily goal + history charts** — `GoalStore`/`GoalMath` drive the goal ring;
+  `DailyHistoryStore`/`HistoryAggregator` feed a Swift Charts bar chart
+  (`HistoryChartView`, `import Charts`) for the recent-days view. `StatsView`
+  also shows the Duolingo-style streak calendar (`CompactStreakCalendarView`)
+  shaded via `StreakCalculator.isActiveDay`, so the calendar and the streak
+  badge can never disagree.
+- **Themes & sound** — `AppearanceSettings` defines `AccentTheme`,
+  `AppearanceMode`, and `CompletionSound` (each mapping to a system sound id or
+  silent), persisted via `AppearanceSettingsStore`.
+- **Out-of-process surfaces** — App Intents / Siri (`PomodoroIntents`:
+  `StartFocusSessionIntent`, `CheckStreakIntent`, `PomodoroShortcuts`) and the
+  iOS 18 Control Center control (`PomodoroControl`) run in separate processes,
+  so they **post a `PendingCommand`** into the App Group mailbox and open the
+  app; `TimerManager.consumePendingCommand()` applies it on activation. The
+  query intent reads the shared state / stats directly so it can answer without
+  launching. Live state flows outward through `SharedSessionState` /
+  `SharedSessionStore`, and `publishSharedState()` reloads the widget timelines.
+- **Live Activity** — `LiveActivityController` starts/updates/ends a
+  `TimerActivityAttributes` activity; all ActivityKit calls are gated on iOS
+  16.1+ and on activities being enabled, so it is a safe no-op otherwise. The
+  widget extension renders it (`PomodoroLiveActivity`), including the Dynamic
+  Island, which only appears on devices that have it.
+- **Focus-mode lock + Screen Time** — `EnhancedAppLockManager` (aliased
+  `AppLockManager`) provides the in-app retention nudge (escalating "return to
+  focus" notifications, idle-timer disable, the `AppLockOverlay`). For *real*
+  system-level blocking it delegates to `ScreenTimeController`
+  (`FamilyControls`/`ManagedSettings`). **This is entitlement-gated:** the
+  frameworks compile and link without the `com.apple.developer.family-controls`
+  entitlement, but authorization only succeeds at runtime on a device that has
+  the Apple-approved entitlement — otherwise it degrades gracefully to the
+  motivational nudges only (`NoopScreenTimeController`).
+
+## Design system
+
+`DesignTokens` ([`DesignTokens.swift`](../pomadoro2/DesignTokens.swift))
+centralizes the palette (focus/break gradients), typography scale, spacing,
+corner radii, shadow, and animation timings that were previously hardcoded
+inline (the gradient RGB tuples alone were repeated six times). `CardModifiers`
+([`CardModifiers.swift`](../pomadoro2/CardModifiers.swift)) defines the standard
+card surface once as a `.cardStyle()` view modifier. The old ~1030-line
+`ContentView` has been decomposed: `ProgressRingView`, `DynamicBackgroundView`,
+the `QuickStatCard`/`ControlButton`/`FloatingButton` components in
+`TimerComponents`, `WelcomeView`, and `HistoryChartView` are all extracted, so
+`ContentView` focuses on layout/state orchestration.
 
 ## Build, test & tooling
 
-- **Unit tests** (`pomadoro2Tests`) target the pure `TimerMath` and
-  `StreakCalculator` logic — they don't construct the Firebase-backed managers.
-- **UI tests** (`pomadoro2UITests`) are launch/smoke tests that rely on the
-  `-skipWelcome` / `-screen` launch arguments handled in `ContentView`.
+- **Unit tests** (`pomadoro2Tests`, ~95 [Swift Testing](https://developer.apple.com/documentation/testing)
+  `@Test` cases across `TimerStateTests`, `TimerManagerTests`, `StatsStoreTests`,
+  `SessionRecoveryTests`, `SettingsStoreTests`, `AchievementsAndBreaksTests`,
+  `GoalsAndHistoryTests`, `AppearanceSettingsTests`, `PendingCommandStoreTests`,
+  `SharedSessionStateTests`, `StatsBackendTests`, and `pomadoro2Tests`) cover the
+  pure logic and the `TimerManager` state machine via DI + a mock backend — no
+  Firebase, notifications, or Live Activities are constructed.
+- **UI tests** (`pomadoro2UITests`) are launch/smoke tests driven by the
+  `-skipWelcome` / `-screen` launch arguments. They run locally (⌘U) but are
+  excluded from CI, where headless simulators flakily fail to acquire UI
+  background assertions.
+- **Coverage gate** — [`scripts/check-coverage.sh`](../scripts/check-coverage.sh)
+  enforces an 80% line-coverage floor on the *logic* files only. It
+  **auto-discovers** gated files by naming convention (suffixes like `Math`,
+  `Calculator`, `Store`, `State`, `Policy`, `Evaluator`, `Recovery`,
+  `Achievements`, `Settings`, `Content`), so a new logic file can't silently
+  bypass the gate; a file opts out with a `// coverage:ignore-file` marker. A
+  discovered logic file with no coverage rows fails the gate.
+- **CI** ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs two
+  jobs on `macos-15`: a **SwiftLint** job (errors block, warnings are a signal)
+  and a **build-and-test** job that builds + runs `pomadoro2Tests` on an iOS
+  Simulator with code coverage, then runs the coverage gate. Screen Time
+  compiles fine here because the entitlement is only checked at runtime.
 - `Log` ([`Logging.swift`](../pomadoro2/Logging.swift)) forwards to `print` in
-  DEBUG and compiles to nothing in Release, so diagnostics never reach a shipped
-  console.
-- CI builds and tests on an iOS Simulator on every push/PR
-  (`.github/workflows/ci.yml`).
+  DEBUG and compiles to nothing in Release.
