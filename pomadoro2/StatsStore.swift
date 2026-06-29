@@ -63,12 +63,22 @@ enum StatsCalculator {
 
     /// Field-wise maximum, used to reconcile local stats with values pulled
     /// from another device (matches the app's existing multi-device policy).
+    /// `lastCompletionDate` takes the later of the two so a more recent
+    /// completion on another device wins — otherwise streak math would keep
+    /// recalculating against a stale local date.
     static func merging(_ state: StatsState, remote: StatsState) -> StatsState {
-        StatsState(
+        let latestCompletion: Date?
+        switch (state.lastCompletionDate, remote.lastCompletionDate) {
+        case let (local?, remote?): latestCompletion = max(local, remote)
+        case let (local?, nil): latestCompletion = local
+        case let (nil, remote?): latestCompletion = remote
+        case (nil, nil): latestCompletion = nil
+        }
+        return StatsState(
             todayFocusMinutes: max(state.todayFocusMinutes, remote.todayFocusMinutes),
             totalFocusMinutes: max(state.totalFocusMinutes, remote.totalFocusMinutes),
             currentStreak: max(state.currentStreak, remote.currentStreak),
-            lastCompletionDate: state.lastCompletionDate
+            lastCompletionDate: latestCompletion
         )
     }
 

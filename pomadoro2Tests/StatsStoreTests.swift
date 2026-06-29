@@ -92,6 +92,26 @@ struct StatsCalculatorTests {
         #expect(merged.totalFocusMinutes == 250)
         #expect(merged.currentStreak == 7)
     }
+
+    @Test func mergeTakesLaterCompletionDate() {
+        let earlier = Date(timeIntervalSince1970: 1_000)
+        let later = Date(timeIntervalSince1970: 2_000)
+        // Remote completed more recently than local.
+        let local = StatsState(currentStreak: 3, lastCompletionDate: earlier)
+        let remote = StatsState(currentStreak: 3, lastCompletionDate: later)
+        #expect(StatsCalculator.merging(local, remote: remote).lastCompletionDate == later)
+        // Symmetric: local later than remote.
+        #expect(StatsCalculator.merging(remote, remote: local).lastCompletionDate == later)
+    }
+
+    @Test func mergeKeepsWhicheverDateExists() {
+        let date = Date(timeIntervalSince1970: 1_000)
+        let withDate = StatsState(lastCompletionDate: date)
+        let noDate = StatsState(lastCompletionDate: nil)
+        #expect(StatsCalculator.merging(noDate, remote: withDate).lastCompletionDate == date)
+        #expect(StatsCalculator.merging(withDate, remote: noDate).lastCompletionDate == date)
+        #expect(StatsCalculator.merging(noDate, remote: noDate).lastCompletionDate == nil)
+    }
 }
 
 struct StatsPersistenceTests {

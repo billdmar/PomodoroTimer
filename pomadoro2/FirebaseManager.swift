@@ -11,7 +11,16 @@ import FirebaseAuth
 import FirebaseFirestore
 import Network
 
-class FirebaseManager: ObservableObject {
+/// The backend operations the app needs, abstracted so consumers (and tests)
+/// can depend on a protocol rather than the concrete Firebase client.
+protocol StatsBackend: AnyObject {
+    func saveUserStats(focusMinutes: Int, totalMinutes: Int, streak: Int) async
+    func loadUserStats() async -> StatsState?
+    func leaderboard(limit: Int) async -> [LeaderboardEntry]
+    func logFocusSession(duration: Int, completedAt: Date) async
+}
+
+class FirebaseManager: ObservableObject, StatsBackend {
     @Published var isAuthenticated = false
     @Published var currentUser: User?
     @Published var isLoading = false
@@ -102,12 +111,11 @@ class FirebaseManager: ObservableObject {
 
     // MARK: - User Stats
 
-    func saveUserStats(focusMinutes: Int, totalMinutes: Int, streak: Int) {
+    func saveUserStats(focusMinutes: Int, totalMinutes: Int, streak: Int) async {
         guard let userId = currentUser?.uid else {
             Log.debug("No authenticated user")
             return
         }
-
         guard isOnline else {
             Log.debug("Offline - stats will sync when connection is restored")
             return
@@ -122,95 +130,78 @@ class FirebaseManager: ObservableObject {
             "lastCompletionDate": Date()
         ]
 
-        db.collection("userStats").document(userId).setData(data, merge: true) { error in
-            if let error = error {
-                Log.debug("Error saving user stats: \(error)")
-            } else {
-                Log.debug("User stats saved successfully")
-            }
+        do {
+            try await db.collection("userStats").document(userId).setData(data, merge: true)
+            Log.debug("User stats saved successfully")
+        } catch {
+            Log.debug("Error saving user stats: \(error)")
         }
     }
 
-    func loadUserStats(completion: @escaping (Int, Int, Int) -> Void) {
+    /// Loads this user's stats, or nil when unauthenticated / offline / absent.
+    func loadUserStats() async -> StatsState? {
         guard let userId = currentUser?.uid else {
             Log.debug("No authenticated user")
-            completion(0, 0, 0)
-            return
+            return nil
         }
-
         guard isOnline else {
             Log.debug("Offline - using local stats")
-            completion(0, 0, 0)
-            return
+            return nil
         }
 
-        db.collection("userStats").document(userId).getDocument { document, error in
-            if let error = error {
-                Log.debug("Error loading user stats: \(error)")
-                completion(0, 0, 0)
-                return
-            }
-
-            guard let document = document, document.exists,
-                  let data = document.data() else {
+        do {
+            let document = try await db.collection("userStats").document(userId).getDocument()
+            guard document.exists, let data = document.data() else {
                 Log.debug("No user stats found")
-                completion(0, 0, 0)
-                return
+                return nil
             }
-
-            let todayMinutes = data["todayFocusMinutes"] as? Int ?? 0
-            let totalMinutes = data["totalFocusMinutes"] as? Int ?? 0
-            let streak = data["currentStreak"] as? Int ?? 0
-
-            DispatchQueue.main.async {
-                completion(todayMinutes, totalMinutes, streak)
-            }
+            return StatsState(
+                todayFocusMinutes: data["todayFocusMinutes"] as? Int ?? 0,
+                totalFocusMinutes: data["totalFocusMinutes"] as? Int ?? 0,
+                currentStreak: data["currentStreak"] as? Int ?? 0,
+                lastCompletionDate: (data["lastCompletionDate"] as? Timestamp)?.dateValue()
+            )
+        } catch {
+            Log.debug("Error loading user stats: \(error)")
+            return nil
         }
     }
 
     // MARK: - Leaderboard
 
-    func getLeaderboard(limit: Int = 10, completion: @escaping ([LeaderboardEntry]) -> Void) {
+    func leaderboard(limit: Int = 10) async -> [LeaderboardEntry] {
         guard isOnline else {
             Log.debug("Offline - cannot load leaderboard")
-            completion([])
-            return
+            return []
         }
 
-        db.collection("userStats")
-            .order(by: "totalFocusMinutes", descending: true)
-            .limit(to: limit)
-            .getDocuments { snapshot, error in
-                if let error = error {
-                    Log.debug("Error fetching leaderboard: \(error)")
-                    completion([])
-                    return
-                }
-
-                let entries = snapshot?.documents.compactMap { document -> LeaderboardEntry? in
-                    let data = document.data()
-                    return LeaderboardEntry(
-                        userId: document.documentID,
-                        totalMinutes: data["totalFocusMinutes"] as? Int ?? 0,
-                        streak: data["currentStreak"] as? Int ?? 0,
-                        lastActive: (data["lastUpdated"] as? Timestamp)?.dateValue() ?? Date()
-                    )
-                } ?? []
-
-                DispatchQueue.main.async {
-                    completion(entries)
-                }
+        do {
+            let snapshot = try await db.collection("userStats")
+                .order(by: "totalFocusMinutes", descending: true)
+                .limit(to: limit)
+                .getDocuments()
+            return snapshot.documents.map { document in
+                let data = document.data()
+                return LeaderboardEntry(
+                    userId: document.documentID,
+                    totalMinutes: data["totalFocusMinutes"] as? Int ?? 0,
+                    streak: data["currentStreak"] as? Int ?? 0,
+                    lastActive: (data["lastUpdated"] as? Timestamp)?.dateValue() ?? Date()
+                )
             }
+        } catch {
+            Log.debug("Error fetching leaderboard: \(error)")
+            return []
+        }
     }
 
     // MARK: - Focus Sessions
 
-    func logFocusSession(duration: Int, completedAt: Date = Date()) {
+    func logFocusSession(duration: Int, completedAt: Date = Date()) async {
         guard let userId = currentUser?.uid else {
             Log.debug("No authenticated user")
             return
         }
-
         guard isOnline else {
             Log.debug("Offline - session will be logged when connection is restored")
             return
@@ -223,12 +214,11 @@ class FirebaseManager: ObservableObject {
             "timestamp": FieldValue.serverTimestamp()
         ]
 
-        db.collection("focusSessions").addDocument(data: sessionData) { error in
-            if let error = error {
-                Log.debug("Error logging focus session: \(error)")
-            } else {
-                Log.debug("Focus session logged successfully")
-            }
+        do {
+            _ = try await db.collection("focusSessions").addDocument(data: sessionData)
+            Log.debug("Focus session logged successfully")
+        } catch {
+            Log.debug("Error logging focus session: \(error)")
         }
     }
 
@@ -248,8 +238,16 @@ class FirebaseManager: ObservableObject {
             }
         }
 
-        if error.localizedDescription.contains("network") {
-            return "Network connection problem. Please check your internet and try again."
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorNotConnectedToInternet,
+                 NSURLErrorNetworkConnectionLost,
+                 NSURLErrorTimedOut:
+                return "Network connection problem. Please check your internet and try again."
+            default:
+                break
+            }
         }
 
         return error.localizedDescription

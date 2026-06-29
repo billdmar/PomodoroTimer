@@ -174,9 +174,12 @@ struct LeaderboardView: View {
 
     private func loadLeaderboard() {
         isLoading = true
-        firebaseManager.getLeaderboard { entries in
-            self.leaderboardEntries = entries
-            self.isLoading = false
+        Task {
+            let entries = await firebaseManager.leaderboard(limit: 10)
+            await MainActor.run {
+                self.leaderboardEntries = entries
+                self.isLoading = false
+            }
         }
     }
 }
