@@ -35,7 +35,8 @@ struct SettingsStoreTests {
             focusDuration: 50 * 60,
             breakDuration: 10 * 60,
             focusEmoji: "🔥",
-            breakEmoji: "☕"
+            breakEmoji: "☕",
+            longBreakDuration: 20 * 60
         )
         store.save(custom)
 

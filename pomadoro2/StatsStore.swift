@@ -16,6 +16,11 @@ struct StatsState: Equatable {
     var totalFocusMinutes: Int = 0
     var currentStreak: Int = 0
     var lastCompletionDate: Date?
+    /// Focus sessions completed today (drives the long-break cadence). Resets
+    /// on a new calendar day.
+    var todaySessions: Int = 0
+    /// All-time focus sessions completed (drives session-count achievements).
+    var totalSessions: Int = 0
 }
 
 /// Pure stats transitions. No persistence, no UIKit — fully testable with an
@@ -35,6 +40,7 @@ enum StatsCalculator {
         }
         var updated = state
         updated.todayFocusMinutes = 0
+        updated.todaySessions = 0
         return updated
     }
 
@@ -51,12 +57,14 @@ enum StatsCalculator {
         let newDay = isNewDay(lastCompletion: state.lastCompletionDate, now: now, calendar: calendar)
 
         updated.todayFocusMinutes = newDay ? focusMinutes : state.todayFocusMinutes + focusMinutes
+        updated.todaySessions = newDay ? 1 : state.todaySessions + 1
         updated.currentStreak = StreakCalculator.updatedStreak(
             previousStreak: state.currentStreak,
             lastCompletion: state.lastCompletionDate,
             now: now
         )
         updated.totalFocusMinutes = state.totalFocusMinutes + focusMinutes
+        updated.totalSessions = state.totalSessions + 1
         updated.lastCompletionDate = now
         return updated
     }
@@ -78,7 +86,9 @@ enum StatsCalculator {
             todayFocusMinutes: max(state.todayFocusMinutes, remote.todayFocusMinutes),
             totalFocusMinutes: max(state.totalFocusMinutes, remote.totalFocusMinutes),
             currentStreak: max(state.currentStreak, remote.currentStreak),
-            lastCompletionDate: latestCompletion
+            lastCompletionDate: latestCompletion,
+            todaySessions: max(state.todaySessions, remote.todaySessions),
+            totalSessions: max(state.totalSessions, remote.totalSessions)
         )
     }
 
@@ -95,6 +105,8 @@ struct StatsPersistence {
         static let total = "totalFocusMinutes"
         static let streak = "currentStreak"
         static let lastCompletion = "lastCompletionDate"
+        static let todaySessions = "todaySessions"
+        static let totalSessions = "totalSessions"
     }
 
     private let defaults: UserDefaults
@@ -108,7 +120,9 @@ struct StatsPersistence {
             todayFocusMinutes: defaults.integer(forKey: Key.today),
             totalFocusMinutes: defaults.integer(forKey: Key.total),
             currentStreak: defaults.integer(forKey: Key.streak),
-            lastCompletionDate: defaults.object(forKey: Key.lastCompletion) as? Date
+            lastCompletionDate: defaults.object(forKey: Key.lastCompletion) as? Date,
+            todaySessions: defaults.integer(forKey: Key.todaySessions),
+            totalSessions: defaults.integer(forKey: Key.totalSessions)
         )
     }
 
@@ -117,5 +131,7 @@ struct StatsPersistence {
         defaults.set(state.totalFocusMinutes, forKey: Key.total)
         defaults.set(state.currentStreak, forKey: Key.streak)
         defaults.set(state.lastCompletionDate, forKey: Key.lastCompletion)
+        defaults.set(state.todaySessions, forKey: Key.todaySessions)
+        defaults.set(state.totalSessions, forKey: Key.totalSessions)
     }
 }

@@ -52,6 +52,7 @@ enum TimerState: Equatable {
 enum TimerConstants {
     static let defaultFocusDuration: TimeInterval = 25 * 60
     static let defaultBreakDuration: TimeInterval = 5 * 60
+    static let defaultLongBreakDuration: TimeInterval = 15 * 60
     /// UI refresh cadence — fast enough for a smooth ring, light on CPU.
     static let tickInterval: TimeInterval = 0.25
     /// `AudioServicesPlaySystemSound` id for the completion chime.
