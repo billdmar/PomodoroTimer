@@ -211,6 +211,11 @@ class TimerManager: ObservableObject {
 
         // Lock app only during focus mode
         if isFocusMode {
+            // Request Screen Time authorization once so real shielding can take
+            // effect; falls back to motivational nudges if unauthorized.
+            if !appLockManager.screenTimeAuthorized {
+                Task { await appLockManager.requestScreenTimeAuthorization() }
+            }
             appLockManager.lockApp()
         }
 
