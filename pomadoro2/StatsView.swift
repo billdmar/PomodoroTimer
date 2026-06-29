@@ -11,6 +11,7 @@ struct StatsView: View {
     @ObservedObject var timerManager: TimerManager
     @Environment(\.dismiss) private var dismiss
     @State private var selectedDate: Date?
+    @State private var historyDays = 7
 
     var body: some View {
         NavigationView {
@@ -74,6 +75,20 @@ struct StatsView: View {
                     .padding(.vertical, DesignTokens.Spacing.md)
                     .cardStyle()
                     .padding(.horizontal, DesignTokens.Spacing.md)
+
+                    // Daily Goal Section
+                    dailyGoalSection
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .padding(.vertical, DesignTokens.Spacing.md)
+                        .cardStyle()
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+
+                    // Focus History Section
+                    historySection
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .padding(.vertical, DesignTokens.Spacing.md)
+                        .cardStyle()
+                        .padding(.horizontal, DesignTokens.Spacing.md)
 
                     // Calendar Streak Section - more compact
                     VStack(spacing: 16) {
@@ -182,6 +197,79 @@ struct StatsView: View {
                     .font(.headline)
                 }
             }
+        }
+    }
+
+    // MARK: - Daily Goal
+
+    private var dailyGoalSection: some View {
+        let progress = timerManager.goalProgress
+        let met = GoalMath.isMet(focusMinutesToday: timerManager.todayFocusMinutes,
+                                 goalMinutes: timerManager.dailyGoalMinutes)
+        return VStack(spacing: DesignTokens.Spacing.md) {
+            HStack {
+                Text("Daily Goal")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Text("\(timerManager.dailyGoalMinutes) min")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            ZStack {
+                Circle()
+                    .stroke(Color(.systemGray5), lineWidth: 12)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        (met ? Color.green : Color.red).gradient,
+                        style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                VStack(spacing: 2) {
+                    Text("\(Int(progress * 100))%")
+                        .font(.title2).fontWeight(.bold).monospacedDigit()
+                    Text(met ? "Goal met! 🎉" : "\(timerManager.todayFocusMinutes)/\(timerManager.dailyGoalMinutes) min")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
+            }
+            .frame(width: 150, height: 150)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Daily focus goal")
+            .accessibilityValue("\(Int(progress * 100)) percent, \(timerManager.todayFocusMinutes) of \(timerManager.dailyGoalMinutes) minutes")
+
+            Stepper("Goal: \(timerManager.dailyGoalMinutes) min",
+                    value: Binding(
+                        get: { timerManager.dailyGoalMinutes },
+                        set: { timerManager.setDailyGoal(minutes: $0) }
+                    ),
+                    in: 15...600, step: 15)
+                .font(.caption)
+        }
+    }
+
+    // MARK: - History
+
+    private var historySection: some View {
+        VStack(spacing: DesignTokens.Spacing.md) {
+            HStack {
+                Text("Focus History")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Picker("Range", selection: $historyDays) {
+                    Text("Week").tag(7)
+                    Text("Month").tag(30)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 160)
+            }
+
+            HistoryChartView(
+                data: timerManager.recentHistory(days: historyDays),
+                accent: .red
+            )
         }
     }
 }

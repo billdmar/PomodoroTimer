@@ -45,6 +45,19 @@ class TimerManager: ObservableObject {
     /// settings.
     @Published var longBreakDuration: TimeInterval = TimerConstants.defaultLongBreakDuration
 
+    /// Daily focus goal in minutes (drives the goal ring).
+    @Published var dailyGoalMinutes: Int = GoalStore.defaultGoalMinutes
+
+    /// 0...1 progress toward today's goal.
+    var goalProgress: Double {
+        GoalMath.progress(focusMinutesToday: todayFocusMinutes, goalMinutes: dailyGoalMinutes)
+    }
+
+    /// Recent per-day focus totals (oldest first) for the history chart.
+    func recentHistory(days: Int) -> [DailyFocus] {
+        HistoryAggregator.recentDays(historyStore.loadTotals(), days: days, now: Date())
+    }
+
     // Firebase integration
     private let firebaseManager = FirebaseManager()
 
@@ -57,6 +70,8 @@ class TimerManager: ObservableObject {
     private let sessionStore = SessionStore()
     private let statsPersistence = StatsPersistence()
     private let sharedSessionStore = SharedSessionStore()
+    private let goalStore = GoalStore()
+    private let historyStore = DailyHistoryStore()
     // Min deployment is iOS 18.5, so the 16.1-gated controller is always usable.
     private let liveActivity = LiveActivityController()
     private var cancellables = Set<AnyCancellable>()
@@ -90,6 +105,13 @@ class TimerManager: ObservableObject {
         focusEmoji = values.focusEmoji
         breakEmoji = values.breakEmoji
         longBreakDuration = values.longBreakDuration
+        dailyGoalMinutes = goalStore.loadGoalMinutes()
+    }
+
+    /// Updates and persists the daily focus goal.
+    func setDailyGoal(minutes: Int) {
+        dailyGoalMinutes = max(0, minutes)
+        goalStore.save(goalMinutes: dailyGoalMinutes)
     }
 
     /// Restores an interrupted session (the app was quit/crashed mid-timer).
@@ -352,6 +374,7 @@ class TimerManager: ObservableObject {
         if isFocusMode {
             let focusMinutes = Int(focusDuration / 60)
             updateStats(focusMinutesCompleted: focusMinutes)
+            historyStore.add(minutes: focusMinutes, on: Date())
             nextBreakIsLong = BreakPolicy.breakKind(completedTodaySessions: todaySessions) == .long
             isLongBreak = nextBreakIsLong
 
