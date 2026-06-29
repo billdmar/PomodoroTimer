@@ -247,7 +247,8 @@ struct ContentView: View {
                             .font(.caption2)
                             .foregroundColor(.secondary)
 
-                        Text("Auth: \(timerManager.firebaseManagerPublished.isAuthenticated ? "✅" : "❌") | Online: \(timerManager.firebaseManagerPublished.isOnline ? "🟢" : "🔴")")
+                        Text("Auth: \(timerManager.firebaseManagerPublished.isAuthenticated ? "✅" : "❌") | "
+                             + "Online: \(timerManager.firebaseManagerPublished.isOnline ? "🟢" : "🔴")")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }

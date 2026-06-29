@@ -83,14 +83,14 @@ struct AppearanceSettingsStore {
 
     func load() -> Values {
         var values = Values()
-        if let raw = defaults.string(forKey: Key.accent), let v = AccentTheme(rawValue: raw) {
-            values.accent = v
+        if let raw = defaults.string(forKey: Key.accent), let accent = AccentTheme(rawValue: raw) {
+            values.accent = accent
         }
-        if let raw = defaults.string(forKey: Key.appearance), let v = AppearanceMode(rawValue: raw) {
-            values.appearance = v
+        if let raw = defaults.string(forKey: Key.appearance), let mode = AppearanceMode(rawValue: raw) {
+            values.appearance = mode
         }
-        if let raw = defaults.string(forKey: Key.sound), let v = CompletionSound(rawValue: raw) {
-            values.completionSound = v
+        if let raw = defaults.string(forKey: Key.sound), let sound = CompletionSound(rawValue: raw) {
+            values.completionSound = sound
         }
         return values
     }
