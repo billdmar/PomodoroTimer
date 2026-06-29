@@ -19,7 +19,7 @@ struct StatsView: View {
                     // Header - more compact
                     VStack(spacing: 12) {
                         Text("📊")
-                            .font(.system(size: 40))
+                            .font(.system(size: DesignTokens.Typography.emojiSize))
 
                         Text("Your Progress")
                             .font(.title3)
@@ -69,14 +69,10 @@ struct StatsView: View {
                             )
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.systemBackground))
-                            .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
-                    )
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.vertical, DesignTokens.Spacing.md)
+                    .cardStyle()
+                    .padding(.horizontal, DesignTokens.Spacing.md)
 
                     // Calendar Streak Section - more compact
                     VStack(spacing: 16) {
@@ -120,14 +116,10 @@ struct StatsView: View {
                             selectedDate: $selectedDate
                         )
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.systemBackground))
-                            .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
-                    )
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.vertical, DesignTokens.Spacing.md)
+                    .cardStyle()
+                    .padding(.horizontal, DesignTokens.Spacing.md)
 
                     // Achievement Section - more compact
                     VStack(spacing: 12) {
@@ -188,14 +180,10 @@ struct StatsView: View {
                             )
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.systemBackground))
-                            .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
-                    )
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.vertical, DesignTokens.Spacing.md)
+                    .cardStyle()
+                    .padding(.horizontal, DesignTokens.Spacing.md)
 
                     // Extra bottom padding to ensure scrolling works
                     Color.clear
@@ -255,9 +243,9 @@ struct TodayStatCard: View {
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .padding(.vertical, DesignTokens.Spacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card)
                 .fill(color.opacity(0.1))
         )
     }
@@ -458,12 +446,12 @@ struct AchievementBadge: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .padding(.vertical, DesignTokens.Spacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card)
                 .fill(isUnlocked ? Color.yellow.opacity(0.1) : Color.gray.opacity(0.1))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card)
                         .stroke(isUnlocked ? Color.yellow.opacity(0.3) : Color.clear, lineWidth: 1)
                 )
         )

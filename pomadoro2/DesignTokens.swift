@@ -49,11 +49,43 @@ enum DesignTokens {
         static let section: CGFloat = 16
     }
 
+    // MARK: - Typography
+
+    /// A type scale for the app's large display glyphs. These were previously
+    /// fixed `.system(size:)` values scattered across the views. Sizes are kept
+    /// (the design is intentionally bold) but defined once; pair with
+    /// `@ScaledMetric` at call sites where the glyph should grow with Dynamic
+    /// Type (see `display`/`emoji` usage). Body-level text uses semantic styles
+    /// (`.headline`, `.body`, …) directly, which already scale.
+    enum Typography {
+        /// Big celebratory emoji / hero glyph.
+        static let displaySize: CGFloat = 80
+        /// Full-screen monospaced countdown.
+        static let timer = Font.system(size: 56, weight: .thin, design: .monospaced)
+        /// Inline countdown on the main screen.
+        static let timerCompact = Font.system(size: 48, weight: .ultraLight, design: .monospaced)
+        /// Screen / section emoji accents.
+        static let emojiSize: CGFloat = 50
+        /// Screen titles.
+        static let screenTitle = Font.system(size: 28, weight: .bold, design: .rounded)
+    }
+
+    // MARK: - Shadow
+
+    enum Shadow {
+        static let cardColor = Color.black.opacity(0.08)
+        static let cardRadius: CGFloat = 6
+        static let cardY: CGFloat = 3
+    }
+
     // MARK: - Animation
 
     enum Animation {
+        static let quick: TimeInterval = 0.2
         static let standard: TimeInterval = 0.3
         static let smooth: TimeInterval = 0.5
         static let emphasis: TimeInterval = 0.6
+        static let elevated: TimeInterval = 0.8
+        static let extended: TimeInterval = 2.5
     }
 }

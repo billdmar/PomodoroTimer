@@ -344,7 +344,7 @@ struct ContentView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("🍅 Pomodoro")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(DesignTokens.Typography.screenTitle)
                         .foregroundColor(.primary)
 
                     Text(timerManager.isFocusMode ? "Focus Time" : "Break Time")
@@ -407,7 +407,7 @@ struct ContentView: View {
                 // Emoji section - moved up
                 VStack(spacing: 16) {
                     Text(timerManager.currentEmoji)
-                        .font(.system(size: 80))
+                        .font(.system(size: DesignTokens.Typography.displaySize))
                         .scaleEffect(scaleEffect)
                         .animation(.spring(response: 0.5, dampingFraction: 0.7), value: timerManager.currentEmoji)
                         .animation(.easeInOut(duration: 0.3), value: scaleEffect)
@@ -474,7 +474,7 @@ struct ContentView: View {
                     // Time display
                     VStack(spacing: 8) {
                         Text(timerManager.formattedTime)
-                            .font(.system(size: 48, weight: .ultraLight, design: .monospaced))
+                            .font(DesignTokens.Typography.timerCompact)
                             .foregroundColor(.primary)
                             .opacity(backgroundOpacity)
                             .animation(.easeInOut(duration: 0.3), value: backgroundOpacity)
@@ -623,7 +623,7 @@ struct ContentView: View {
                 VStack(spacing: 20) {
                     // Timer display above emoji
                     Text(timerManager.formattedTime)
-                        .font(.system(size: 56, weight: .thin, design: .monospaced))
+                        .font(DesignTokens.Typography.timer)
                         .foregroundColor(.white)
                         .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
                         .opacity(timerManager.isRunning ? 1 : 0)
@@ -654,7 +654,7 @@ struct ContentView: View {
 
                         // Centered emoji with hover effect
                         Text(timerManager.currentEmoji)
-                            .font(.system(size: 80))
+                            .font(.system(size: DesignTokens.Typography.displaySize))
                             .scaleEffect(timerManager.isRunning ? 1.3 : 1.0)
                             .offset(y: emojiHovered ? -4 : 0)
                             .animation(.easeInOut(duration: 0.2), value: emojiHovered)

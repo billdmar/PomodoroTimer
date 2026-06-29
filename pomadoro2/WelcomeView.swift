@@ -56,13 +56,13 @@ struct WelcomeView: View {
             // Welcome content
             VStack(spacing: 30) {
                 Text(welcomeSteps[currentStep].emoji)
-                    .font(.system(size: 80))
+                    .font(.system(size: DesignTokens.Typography.displaySize))
                     .scaleEffect(1.0)
                     .animation(.spring(response: 0.6, dampingFraction: 0.8), value: currentStep)
 
                 VStack(spacing: 16) {
                     Text(welcomeSteps[currentStep].title)
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(DesignTokens.Typography.screenTitle)
                         .foregroundColor(.primary)
                         .multilineTextAlignment(.center)
 
@@ -137,7 +137,7 @@ struct AppLockOverlay: View {
 
             VStack(spacing: 30) {
                 Image(systemName: "lock.shield.fill")
-                    .font(.system(size: 50))
+                    .font(.system(size: DesignTokens.Typography.emojiSize))
                     .foregroundColor(.orange)
 
                 VStack(spacing: 16) {
