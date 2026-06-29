@@ -16,21 +16,13 @@ class EnhancedAppLockManager: ObservableObject {
     @Published var isAppLocked = false
     @Published var showingUnlockAlert = false
     @Published var unlockAttempts = 0
-    @Published var showingAppSuggestions = false
     @Published var blockedApps: Set<String> = []
-
-    // User-defined apps they want to avoid
-    @Published var distractingApps: [String] = [
-        "Social Media", "Instagram", "TikTok", "Twitter", "Facebook",
-        "Games", "YouTube", "Netflix", "Shopping Apps"
-    ]
 
     /// Whether real Screen Time shielding is active (requires the user to grant
     /// Family Controls authorization). When false, only the motivational nudges
     /// below are in effect.
     @Published var screenTimeAuthorized = false
 
-    private var lockStartTime: Date?
     private var backgroundTime: Date?
     private var backgroundObserver: NSObjectProtocol?
     private var foregroundObserver: NSObjectProtocol?
@@ -95,11 +87,11 @@ class EnhancedAppLockManager: ObservableObject {
 
     private func handleAppWillEnterForeground() {
         if isAppLocked {
-            // Calculate time away
-            let timeAway = backgroundTime?.timeIntervalSinceNow ?? 0
+            // How long the user was away (positive seconds).
+            let timeAway = backgroundTime.map { Date().timeIntervalSince($0) } ?? 0
 
-            // Show different alerts based on time away
-            if abs(timeAway) > 30 { // More than 30 seconds away
+            // Show the return prompt only after a meaningful absence.
+            if timeAway > 30 {
                 showingUnlockAlert = true
                 unlockAttempts += 1
             }
@@ -150,7 +142,6 @@ class EnhancedAppLockManager: ObservableObject {
 
     func lockApp() {
         isAppLocked = true
-        lockStartTime = Date()
         unlockAttempts = 0
 
         // Disable idle timer to prevent screen from sleeping
@@ -168,7 +159,6 @@ class EnhancedAppLockManager: ObservableObject {
 
     func unlockApp() {
         isAppLocked = false
-        lockStartTime = nil
         unlockAttempts = 0
         showingUnlockAlert = false
         backgroundTime = nil
@@ -229,22 +219,6 @@ class EnhancedAppLockManager: ObservableObject {
         }
     }
 
-    // MARK: - Screen Time Integration Suggestion
-
-    func suggestScreenTimeSetup() -> String {
-        return """
-        💡 Pro Tip: For true app blocking, set up Screen Time:
-
-        1. Go to Settings > Screen Time
-        2. Tap "App Limits"
-        3. Add limits for distracting apps
-        4. Set "Downtime" during your focus sessions
-        5. Enable "Block at End of Limit"
-
-        This works system-wide and can't be easily bypassed!
-        """
-    }
-
     // MARK: - Motivational Features
 
     func getMotivationalMessage() -> String {
@@ -261,13 +235,4 @@ class EnhancedAppLockManager: ObservableObject {
         return messages.randomElement() ?? "Stay focused! You've got this! 🍅"
     }
 
-    func getRemainingLockTime() -> TimeInterval? {
-        guard let lockStart = lockStartTime else { return nil }
-        return Date().timeIntervalSince(lockStart)
-    }
-
-    func getTimeAwayFromApp() -> TimeInterval? {
-        guard let backgroundStart = backgroundTime else { return nil }
-        return abs(backgroundStart.timeIntervalSinceNow)
-    }
 }
