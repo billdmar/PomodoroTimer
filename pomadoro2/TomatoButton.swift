@@ -11,7 +11,7 @@ struct TomatoButton: View {
     @ObservedObject var timerManager: TimerManager
     @State private var isPressed = false
     @State private var showStars = false
-    
+
     var body: some View {
         ZStack {
             // Star particles
@@ -19,7 +19,7 @@ struct TomatoButton: View {
                 StarParticlesView()
                     .allowsHitTesting(false)
             }
-            
+
             // Only show button when timer is NOT running and emoji is at bottom (scale = 1.0)
             if !timerManager.isRunning {
                 Button(action: {
@@ -31,7 +31,7 @@ struct TomatoButton: View {
                             .fill(Color.black.opacity(0.1))
                             .frame(width: 160, height: 160)
                             .offset(y: 4)
-                        
+
                         // Main button background
                         Circle()
                             .fill(
@@ -43,7 +43,7 @@ struct TomatoButton: View {
                                 )
                             )
                             .frame(width: 160, height: 160)
-                        
+
                         // Emoji - only show when not transitioning
                         Text(timerManager.currentEmoji)
                             .font(.system(size: 80))
@@ -66,16 +66,16 @@ struct TomatoButton: View {
             }
         }
     }
-    
+
     private func startPomodoro() {
         // Show stars
         withAnimation {
             showStars = true
         }
-        
+
         // Start timer immediately to trigger the moving animation
         timerManager.startTimer()
-        
+
         // Hide stars after animation
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             withAnimation {

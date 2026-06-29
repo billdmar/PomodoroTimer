@@ -11,7 +11,7 @@ struct StatsView: View {
     @ObservedObject var timerManager: TimerManager
     @Environment(\.dismiss) private var dismiss
     @State private var selectedDate: Date?
-    
+
     var body: some View {
         NavigationView {
             ScrollView(.vertical, showsIndicators: true) {
@@ -20,14 +20,14 @@ struct StatsView: View {
                     VStack(spacing: 12) {
                         Text("📊")
                             .font(.system(size: 40))
-                        
+
                         Text("Your Progress")
                             .font(.title3)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
                     }
                     .padding(.top, 10)
-                    
+
                     // Today's Stats Section - moved up
                     VStack(spacing: 16) {
                         HStack {
@@ -35,14 +35,14 @@ struct StatsView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.primary)
-                            
+
                             Spacer()
-                            
+
                             Text(Date(), style: .date)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
-                        
+
                         HStack(spacing: 12) {
                             TodayStatCard(
                                 icon: "brain.head.profile",
@@ -51,7 +51,7 @@ struct StatsView: View {
                                 label: "Focus Time",
                                 color: .red
                             )
-                            
+
                             TodayStatCard(
                                 icon: "flame.fill",
                                 value: "\(timerManager.currentStreak)",
@@ -59,7 +59,7 @@ struct StatsView: View {
                                 label: "Streak",
                                 color: .orange
                             )
-                            
+
                             TodayStatCard(
                                 icon: "trophy.fill",
                                 value: "\(timerManager.totalFocusMinutes)",
@@ -77,7 +77,7 @@ struct StatsView: View {
                             .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
                     )
                     .padding(.horizontal, 16)
-                    
+
                     // Calendar Streak Section - more compact
                     VStack(spacing: 16) {
                         HStack {
@@ -86,20 +86,20 @@ struct StatsView: View {
                                     .font(.headline)
                                     .fontWeight(.semibold)
                                     .foregroundColor(.primary)
-                                
+
                                 Text("Keep the fire burning! 🔥")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
-                            
+
                             Spacer()
-                            
+
                             // Current streak badge
                             HStack(spacing: 6) {
                                 Image(systemName: "flame.fill")
                                     .font(.caption)
                                     .foregroundColor(.orange)
-                                
+
                                 Text("\(timerManager.currentStreak) day streak")
                                     .font(.caption)
                                     .fontWeight(.medium)
@@ -112,7 +112,7 @@ struct StatsView: View {
                                     .fill(Color.orange.opacity(0.1))
                             )
                         }
-                        
+
                         // Compact Calendar Grid
                         CompactStreakCalendarView(
                             currentStreak: timerManager.currentStreak,
@@ -128,7 +128,7 @@ struct StatsView: View {
                             .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
                     )
                     .padding(.horizontal, 16)
-                    
+
                     // Achievement Section - more compact
                     VStack(spacing: 12) {
                         HStack {
@@ -136,10 +136,10 @@ struct StatsView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.primary)
-                            
+
                             Spacer()
                         }
-                        
+
                         LazyVGrid(columns: [
                             GridItem(.flexible()),
                             GridItem(.flexible()),
@@ -151,35 +151,35 @@ struct StatsView: View {
                                 subtitle: "Complete 1 session",
                                 isUnlocked: timerManager.totalFocusMinutes > 0
                             )
-                            
+
                             AchievementBadge(
                                 icon: "⚡",
                                 title: "Speed Learner",
                                 subtitle: "5 sessions/day",
                                 isUnlocked: timerManager.todayFocusMinutes >= 125
                             )
-                            
+
                             AchievementBadge(
                                 icon: "🔥",
                                 title: "On Fire",
                                 subtitle: "7 day streak",
                                 isUnlocked: timerManager.currentStreak >= 7
                             )
-                            
+
                             AchievementBadge(
                                 icon: "💎",
                                 title: "Diamond Focus",
                                 subtitle: "30 day streak",
                                 isUnlocked: timerManager.currentStreak >= 30
                             )
-                            
+
                             AchievementBadge(
                                 icon: "🏆",
                                 title: "Century Club",
                                 subtitle: "100 sessions",
                                 isUnlocked: timerManager.totalFocusMinutes >= 2500
                             )
-                            
+
                             AchievementBadge(
                                 icon: "🎖️",
                                 title: "Master",
@@ -196,7 +196,7 @@ struct StatsView: View {
                             .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
                     )
                     .padding(.horizontal, 16)
-                    
+
                     // Extra bottom padding to ensure scrolling works
                     Color.clear
                         .frame(height: 50)
@@ -232,24 +232,24 @@ struct TodayStatCard: View {
     let unit: String
     let label: String
     let color: Color
-    
+
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundColor(color)
-            
+
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
                     .font(.headline)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
-                
+
                 Text(unit)
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
-            
+
             Text(label)
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -267,10 +267,10 @@ struct CompactStreakCalendarView: View {
     let currentStreak: Int
     let lastCompletionDate: Date?
     @Binding var selectedDate: Date?
-    
+
     @State private var displayedMonth = Date()
     private let calendar = Calendar.current
-    
+
     var body: some View {
         VStack(spacing: 12) {
             // Month navigation - more compact
@@ -280,22 +280,22 @@ struct CompactStreakCalendarView: View {
                         .font(.body)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Text(displayedMonth, formatter: monthYearFormatter)
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                
+
                 Spacer()
-                
+
                 Button(action: nextMonth) {
                     Image(systemName: "chevron.right")
                         .font(.body)
                         .foregroundColor(.secondary)
                 }
             }
-            
+
             // Day labels - smaller
             HStack {
                 ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { day in
@@ -306,7 +306,7 @@ struct CompactStreakCalendarView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            
+
             // Calendar grid - more compact
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 6) {
                 ForEach(calendarDates, id: \.self) { date in
@@ -321,48 +321,48 @@ struct CompactStreakCalendarView: View {
                     }
                 }
             }
-            
+
             // Legend - more compact
             HStack(spacing: 12) {
                 HStack(spacing: 3) {
                     Circle()
                         .fill(Color.gray.opacity(0.3))
                         .frame(width: 6, height: 6)
-                    
+
                     Text("No activity")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                
+
                 HStack(spacing: 3) {
                     Circle()
                         .fill(Color.orange)
                         .frame(width: 6, height: 6)
-                    
+
                     Text("Completed")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
             }
         }
     }
-    
+
     private var calendarDates: [Date] {
         guard let monthInterval = calendar.dateInterval(of: .month, for: displayedMonth) else {
             return []
         }
-        
+
         let firstOfMonth = monthInterval.start
         let firstDayWeekday = calendar.component(.weekday, from: firstOfMonth)
         let startDate = calendar.date(byAdding: .day, value: -(firstDayWeekday - 1), to: firstOfMonth)!
-        
+
         return (0..<42).compactMap { dayOffset in
             calendar.date(byAdding: .day, value: dayOffset, to: startDate)
         }
     }
-    
+
     private func hasActivityOnDate(_ date: Date) -> Bool {
         // Shade the most recent `currentStreak` days ending on the last
         // completion. Shared with the streak math so the calendar and the
@@ -374,19 +374,19 @@ struct CompactStreakCalendarView: View {
             calendar: calendar
         )
     }
-    
+
     private func previousMonth() {
         withAnimation(.easeInOut(duration: 0.3)) {
             displayedMonth = calendar.date(byAdding: .month, value: -1, to: displayedMonth) ?? displayedMonth
         }
     }
-    
+
     private func nextMonth() {
         withAnimation(.easeInOut(duration: 0.3)) {
             displayedMonth = calendar.date(byAdding: .month, value: 1, to: displayedMonth) ?? displayedMonth
         }
     }
-    
+
     private var monthYearFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM yyyy"
@@ -399,9 +399,9 @@ struct CompactCalendarDayView: View {
     let isInCurrentMonth: Bool
     let hasActivity: Bool
     let isSelected: Bool
-    
+
     private let calendar = Calendar.current
-    
+
     var body: some View {
         VStack {
             Text("\(calendar.component(.day, from: date))")
@@ -420,7 +420,7 @@ struct CompactCalendarDayView: View {
         )
         .opacity(isInCurrentMonth ? 1.0 : 0.5)
     }
-    
+
     private var backgroundFill: Color {
         if hasActivity {
             return Color.orange
@@ -437,20 +437,20 @@ struct AchievementBadge: View {
     let title: String
     let subtitle: String
     let isUnlocked: Bool
-    
+
     var body: some View {
         VStack(spacing: 6) {
             Text(icon)
                 .font(.title3)
                 .grayscale(isUnlocked ? 0 : 1)
                 .opacity(isUnlocked ? 1 : 0.5)
-            
+
             VStack(spacing: 2) {
                 Text(title)
                     .font(.caption2)
                     .fontWeight(.semibold)
                     .foregroundColor(isUnlocked ? .primary : .secondary)
-                
+
                 Text(subtitle)
                     .font(.caption2)
                     .foregroundColor(.secondary)

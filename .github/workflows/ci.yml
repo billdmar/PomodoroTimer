@@ -12,6 +12,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: SwiftLint
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      # Fails the job on rule errors; warnings surface as a quality signal but
+      # do not block. Length/structure thresholds live in .swiftlint.yml.
+      - name: Lint
+        run: swiftlint lint --reporter github-actions-logging
+
   build-and-test:
     name: Build & Test (iOS Simulator)
     runs-on: macos-15
@@ -42,4 +58,12 @@ jobs:
             -destination 'platform=iOS Simulator,OS=latest,name=iPhone 16 Pro' \
             -derivedDataPath .build/DerivedData \
             -only-testing:pomadoro2Tests \
+            -enableCodeCoverage YES \
             CODE_SIGNING_ALLOWED=NO
+
+      # Enforces a line-coverage floor on the pure-logic files only (see the
+      # script header for why view code is excluded).
+      - name: Coverage gate (logic files)
+        run: |
+          xcresult="$(ls -dt .build/DerivedData/Logs/Test/*.xcresult | head -1)"
+          bash scripts/check-coverage.sh "$xcresult" 80
