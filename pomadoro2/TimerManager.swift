@@ -64,23 +64,30 @@ class TimerManager: ObservableObject {
     }
 
     // Firebase integration
-    private let firebaseManager = FirebaseManager()
+    private let firebaseManager: FirebaseManager
 
     /// Focus-mode lock + Screen Time shielding. A dependency, not observable
     /// state owned by the timer — exposed read-only for views that present its
     /// alerts.
     let appLockManager = AppLockManager()
 
-    private let settingsStore = SettingsStore()
-    private let sessionStore = SessionStore()
-    private let statsPersistence = StatsPersistence()
-    private let sharedSessionStore = SharedSessionStore()
-    private let goalStore = GoalStore()
-    private let historyStore = DailyHistoryStore()
-    private let appearanceStore = AppearanceSettingsStore()
-    private let pendingCommandStore = PendingCommandStore()
+    /// Backend used for stats sync / session logging — injectable for tests.
+    /// Defaults to `firebaseManager`.
+    private let backend: StatsBackend
+    private let settingsStore: SettingsStore
+    private let sessionStore: SessionStore
+    private let statsPersistence: StatsPersistence
+    private let sharedSessionStore: SharedSessionStore
+    private let goalStore: GoalStore
+    private let historyStore: DailyHistoryStore
+    private let appearanceStore: AppearanceSettingsStore
+    private let pendingCommandStore: PendingCommandStore
     // Min deployment is iOS 18.5, so the 16.1-gated controller is always usable.
     private let liveActivity = LiveActivityController()
+    /// When false (tests), Firebase auth/sync, notification permission prompts,
+    /// and Live Activity calls are skipped so the state machine runs in
+    /// isolation.
+    private let externalServicesEnabled: Bool
     private var cancellables = Set<AnyCancellable>()
 
     // Explicit state machine (see TimerState). The wall clock remains the
@@ -93,16 +100,39 @@ class TimerManager: ObservableObject {
     }
     private var tickTask: Task<Void, Never>?
 
-    init() {
+    /// Designated initializer. All dependencies default to production, so
+    /// `TimerManager()` works for the app; tests inject a mock backend, an
+    /// isolated `UserDefaults`, and `enableExternalServices: false`.
+    init(
+        firebaseManager: FirebaseManager = FirebaseManager(),
+        backend: StatsBackend? = nil,
+        defaults: UserDefaults = .standard,
+        enableExternalServices: Bool = true
+    ) {
+        self.firebaseManager = firebaseManager
+        self.backend = backend ?? firebaseManager
+        self.settingsStore = SettingsStore(defaults: defaults)
+        self.sessionStore = SessionStore(defaults: defaults)
+        self.statsPersistence = StatsPersistence(defaults: defaults)
+        self.sharedSessionStore = SharedSessionStore(defaults: defaults)
+        self.goalStore = GoalStore(defaults: defaults)
+        self.historyStore = DailyHistoryStore(defaults: defaults)
+        self.appearanceStore = AppearanceSettingsStore(defaults: defaults)
+        self.pendingCommandStore = PendingCommandStore(defaults: defaults)
+        self.externalServicesEnabled = enableExternalServices
+
         loadSettings()
         state = .idle(remaining: focusDuration)
         timeRemaining = focusDuration
         selectRandomMessage()
         generateRandomMotivationalQuote()
-        requestNotificationPermission()
         loadLocalStats()
         recoverSession()
-        setupFirebase()
+        if enableExternalServices {
+            requestNotificationPermission()
+            setupFirebase()
+            observeExtendRequests()
+        }
     }
 
     private func loadSettings() {
@@ -143,14 +173,16 @@ class TimerManager: ObservableObject {
         switch state {
         case .running:
             // Re-anchor the deadline and reschedule the completion notification.
-            cancelCompletionNotification()
             let newEnd = Date().addingTimeInterval(state.remaining(now: Date()) + added)
             state = .running(endDate: newEnd)
             timeRemaining = state.remaining(now: Date())
-            scheduleCompletionNotification(endDate: newEnd)
             saveSession()
             publishSharedState()
-            liveActivity.update(endDate: newEnd, isFocusMode: isFocusMode, emoji: currentEmoji)
+            if externalServicesEnabled {
+                cancelCompletionNotification()
+                scheduleCompletionNotification(endDate: newEnd)
+                liveActivity.update(endDate: newEnd, isFocusMode: isFocusMode, emoji: currentEmoji)
+            }
         case let .paused(remaining):
             let updated = remaining + added
             state = .paused(remaining: updated)
@@ -230,8 +262,10 @@ class TimerManager: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
 
-        // The "Extend +5 min" notification action posts this; add time here.
+    /// Subscribes to the "Extend +5 min" notification action.
+    private func observeExtendRequests() {
         NotificationCenter.default.publisher(for: NotificationActions.extendRequested)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -253,16 +287,18 @@ class TimerManager: ObservableObject {
         if isFocusMode {
             // Request Screen Time authorization once so real shielding can take
             // effect; falls back to motivational nudges if unauthorized.
-            if !appLockManager.screenTimeAuthorized {
+            if externalServicesEnabled, !appLockManager.screenTimeAuthorized {
                 Task { await appLockManager.requestScreenTimeAuthorization() }
             }
             appLockManager.lockApp()
         }
 
-        scheduleCompletionNotification(endDate: endDate)
         saveSession()
         publishSharedState()
-        liveActivity.start(endDate: endDate, isFocusMode: isFocusMode, emoji: currentEmoji)
+        if externalServicesEnabled {
+            scheduleCompletionNotification(endDate: endDate)
+            liveActivity.start(endDate: endDate, isFocusMode: isFocusMode, emoji: currentEmoji)
+        }
         startTick()
         Haptics.medium()
     }
@@ -279,7 +315,6 @@ class TimerManager: ObservableObject {
         }
         isLocked = false
         stopTick()
-        cancelCompletionNotification()
 
         // Unlock app when pausing
         appLockManager.unlockApp()
@@ -287,7 +322,10 @@ class TimerManager: ObservableObject {
         // Persist the paused state so it survives a quit.
         saveSession()
         publishSharedState()
-        liveActivity.end()
+        if externalServicesEnabled {
+            cancelCompletionNotification()
+            liveActivity.end()
+        }
     }
 
     // MARK: - Tick & deadline
@@ -456,8 +494,9 @@ class TimerManager: ObservableObject {
             nextBreakIsLong = BreakPolicy.breakKind(completedTodaySessions: todaySessions) == .long
             isLongBreak = nextBreakIsLong
 
-            // Log session to Firebase
-            Task { await firebaseManager.logFocusSession(duration: focusMinutes) }
+            // Log session to the backend
+            let minutes = focusMinutes
+            Task { await backend.logFocusSession(duration: minutes, completedAt: Date()) }
         }
 
         // Announce what's next (a long break is the reward for completing the
@@ -534,18 +573,19 @@ class TimerManager: ObservableObject {
     }
 
     private func syncWithFirebase() {
+        guard externalServicesEnabled else { return }
         Task { [weak self] in
             guard let self else { return }
-            // Save current stats to Firebase.
-            await firebaseManager.saveUserStats(
+            // Save current stats to the backend.
+            await backend.saveUserStats(
                 focusMinutes: todayFocusMinutes,
                 totalMinutes: totalFocusMinutes,
                 streak: currentStreak
             )
 
-            // Load stats from Firebase (in case the user has data from other
+            // Load stats from the backend (in case the user has data from other
             // devices) and reconcile. Field-wise max + latest completion date.
-            if let remote = await firebaseManager.loadUserStats() {
+            if let remote = await backend.loadUserStats() {
                 let merged = StatsCalculator.merging(statsState, remote: remote)
                 statsState = merged
                 statsPersistence.save(merged)
