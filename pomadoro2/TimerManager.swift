@@ -200,6 +200,7 @@ class TimerManager: ObservableObject {
         scheduleCompletionNotification()
         saveSession()
         startTick()
+        Haptics.medium()
     }
 
     func pauseTimer() {
@@ -318,6 +319,7 @@ class TimerManager: ObservableObject {
         timeRemaining = isFocusMode ? focusDuration : breakDuration
         // Back to a fresh idle state — nothing to recover.
         sessionStore.clear()
+        Haptics.light()
     }
 
     func skipTimer() {
@@ -350,6 +352,7 @@ class TimerManager: ObservableObject {
         // covers the case where the app is backgrounded/suspended at the
         // deadline; pauseTimer() above cancels it so we never double-notify.
         AudioServicesPlaySystemSound(1005)
+        Haptics.success()
 
         // Unlock app when session completes
         appLockManager.unlockApp()

@@ -11,6 +11,7 @@ import Foundation
 struct ContentView: View {
     @StateObject private var timerManager = TimerManager()
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingSettings = false
     @State private var showDebugPanel = false
     // Skipped during UI tests so they can start on the main screen deterministically.
@@ -114,7 +115,9 @@ struct ContentView: View {
             timerManager.handleScenePhase(newPhase)
         }
         .onReceive(Timer.publish(every: 3.0, on: .main, in: .common).autoconnect()) { _ in
-            if timerManager.isRunning {
+            // Skip the continuous gradient drift when the user prefers reduced
+            // motion — it's the most vestibular-triggering animation here.
+            if timerManager.isRunning && !reduceMotion {
                 withAnimation(.easeInOut(duration: 3.0)) {
                     colorShift += 50
                 }
