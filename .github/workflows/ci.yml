@@ -41,8 +41,30 @@ jobs:
           xcodebuild -version
           swift --version
 
+      # Cache resolved SPM artifacts (Firebase pulls large binary targets like
+      # grpc.zip from Google's CDN, which intermittently drops the connection).
+      # Caching makes resolution fast and resilient to those transient failures.
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build/DerivedData/SourcePackages
+            ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved', '**/project.pbxproj') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      # Retry resolution: the CDN download for binary targets occasionally fails
+      # with "network connection lost"; a couple of retries clears it.
       - name: Resolve Swift packages
-        run: xcodebuild -resolvePackageDependencies -project pomadoro2.xcodeproj -scheme pomadoro2
+        run: |
+          for attempt in 1 2 3; do
+            xcodebuild -resolvePackageDependencies \
+              -project pomadoro2.xcodeproj -scheme pomadoro2 \
+              -derivedDataPath .build/DerivedData && break
+            echo "Package resolution attempt $attempt failed; retrying…"
+            sleep 10
+          done
 
       # Builds the app and runs the unit-test target. UI tests live in the repo
       # for local use (Xcode ⌘U) but are excluded from CI: headless simulators

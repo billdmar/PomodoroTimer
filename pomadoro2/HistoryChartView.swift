@@ -28,7 +28,7 @@ struct HistoryChartView: View {
             AxisMarks(position: .leading)
         }
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: max(1, data.count / 6))) { value in
+            AxisMarks(values: .stride(by: .day, count: max(1, data.count / 6))) { _ in
                 AxisValueLabel(format: .dateTime.day().month(.abbreviated))
             }
         }

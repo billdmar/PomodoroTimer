@@ -392,7 +392,7 @@ class TimerManager: ObservableObject {
                 startTimer()
             }
         case .togglePause:
-            isRunning ? pauseTimer() : startTimer()
+            if isRunning { pauseTimer() } else { startTimer() }
         case .none:
             break
         }
