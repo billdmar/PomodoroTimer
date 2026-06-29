@@ -55,7 +55,5 @@ enum TimerConstants {
     static let defaultLongBreakDuration: TimeInterval = 15 * 60
     /// UI refresh cadence — fast enough for a smooth ring, light on CPU.
     static let tickInterval: TimeInterval = 0.25
-    /// `AudioServicesPlaySystemSound` id for the completion chime.
-    static let completionSoundID: UInt32 = 1005
     static let completionNotificationID = "timer.completion"
 }

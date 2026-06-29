@@ -6,14 +6,19 @@
 //
 
 import SwiftUI
+import AudioToolbox
 
 struct SettingsView: View {
     @ObservedObject var timerManager: TimerManager
     @Environment(\.dismiss) private var dismiss
     @State private var focusMinutes: Double = 25
     @State private var breakMinutes: Double = 5
+    @State private var longBreakMinutes: Double = 15
     @State private var focusEmojiText: String = "🍅"
     @State private var breakEmojiText: String = "😌"
+    @State private var accent: AccentTheme = .tomato
+    @State private var appearance: AppearanceMode = .system
+    @State private var sound: CompletionSound = .classic
 
     var body: some View {
         NavigationView {
@@ -191,6 +196,76 @@ struct SettingsView: View {
                                 .fill(Color.gray.opacity(0.05))
                         )
 
+                        // Long break duration
+                        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                            HStack {
+                                Image(systemName: "moon.zzz.fill")
+                                    .foregroundColor(.indigo)
+                                    .font(.title3)
+                                Text("Long Break")
+                                    .font(.headline)
+                                Spacer()
+                                Text("\(Int(longBreakMinutes)) min")
+                                    .font(.title3).fontWeight(.bold).foregroundColor(.indigo)
+                            }
+                            Text("Used after every \(BreakPolicy.defaultSessionsBeforeLongBreak) focus sessions.")
+                                .font(.caption).foregroundColor(.secondary)
+                            Slider(value: $longBreakMinutes, in: 10...45, step: 5)
+                                .tint(.indigo)
+                                .onChange(of: longBreakMinutes) { _, _ in updateTimerSettings() }
+                                .accessibilityLabel("Long break duration")
+                                .accessibilityValue("\(Int(longBreakMinutes)) minutes")
+                        }
+                        .padding(.horizontal, DesignTokens.Spacing.xl)
+                        .padding(.vertical, DesignTokens.Spacing.lg)
+                        .background(
+                            RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.section)
+                                .fill(Color.gray.opacity(0.1))
+                        )
+
+                        // Appearance & sound
+                        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                            Text("Appearance & Sound")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Picker("Theme", selection: $accent) {
+                                ForEach(AccentTheme.allCases) { theme in
+                                    Text(theme.label).tag(theme)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .onChange(of: accent) { _, _ in updateAppearance() }
+                            .accessibilityLabel("Accent theme")
+
+                            Picker("Appearance", selection: $appearance) {
+                                ForEach(AppearanceMode.allCases) { mode in
+                                    Text(mode.label).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .onChange(of: appearance) { _, _ in updateAppearance() }
+                            .accessibilityLabel("Appearance mode")
+
+                            Picker("Completion Sound", selection: $sound) {
+                                ForEach(CompletionSound.allCases) { option in
+                                    Text(option.label).tag(option)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .onChange(of: sound) { _, newValue in
+                                if let id = newValue.systemSoundID { AudioServicesPlaySystemSound(id) }
+                                updateAppearance()
+                            }
+                            .accessibilityLabel("Completion sound")
+                        }
+                        .padding(.horizontal, DesignTokens.Spacing.xl)
+                        .padding(.vertical, DesignTokens.Spacing.lg)
+                        .background(
+                            RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.section)
+                                .fill(Color.gray.opacity(0.1))
+                        )
+
                         // Current mode (simplified from previous status section)
                         VStack(spacing: DesignTokens.Spacing.md) {
                             Text("Current Mode")
@@ -279,8 +354,12 @@ struct SettingsView: View {
     private func loadCurrentValues() {
         focusMinutes = timerManager.focusDuration / 60
         breakMinutes = timerManager.breakDuration / 60
+        longBreakMinutes = timerManager.longBreakDuration / 60
         focusEmojiText = timerManager.focusEmoji
         breakEmojiText = timerManager.breakEmoji
+        accent = timerManager.accentTheme
+        appearance = timerManager.appearanceMode
+        sound = timerManager.completionSound
     }
 
     private func updateTimerSettings() {
@@ -289,8 +368,13 @@ struct SettingsView: View {
             focusMinutes: focusMinutes,
             breakMinutes: breakMinutes,
             focusEmoji: focusEmojiText,
-            breakEmoji: breakEmojiText
+            breakEmoji: breakEmojiText,
+            longBreakMinutes: longBreakMinutes
         )
+    }
+
+    private func updateAppearance() {
+        timerManager.updateAppearance(accent: accent, appearance: appearance, sound: sound)
     }
 
     private func resetToOriginalValues() {

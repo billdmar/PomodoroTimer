@@ -114,6 +114,9 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, newPhase in
             timerManager.handleScenePhase(newPhase)
         }
+        // Apply the user's light/dark/system appearance choice app-wide.
+        .preferredColorScheme(timerManager.appearanceMode.colorScheme)
+        .tint(timerManager.accentTheme.color)
         .onReceive(Timer.publish(every: 3.0, on: .main, in: .common).autoconnect()) { _ in
             // Skip the continuous gradient drift when the user prefers reduced
             // motion — it's the most vestibular-triggering animation here.
