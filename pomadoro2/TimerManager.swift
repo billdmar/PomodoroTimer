@@ -40,6 +40,7 @@ class TimerManager: ObservableObject {
     @Published var appLockManager = AppLockManager()
 
     private let userDefaults = UserDefaults.standard
+    private let settingsStore = SettingsStore()
     private var timer: Timer?
     private var cancellables = Set<AnyCancellable>()
 
@@ -100,12 +101,21 @@ class TimerManager: ObservableObject {
     ]
 
     init() {
+        loadSettings()
         timeRemaining = focusDuration
         selectRandomMessage()
         generateRandomMotivationalQuote()
         requestNotificationPermission()
         loadLocalStats()
         setupFirebase()
+    }
+
+    private func loadSettings() {
+        let values = settingsStore.load()
+        focusDuration = values.focusDuration
+        breakDuration = values.breakDuration
+        focusEmoji = values.focusEmoji
+        breakEmoji = values.breakEmoji
     }
 
     var currentEmoji: String {
@@ -354,6 +364,14 @@ class TimerManager: ObservableObject {
         breakDuration = breakMinutes * 60
         self.focusEmoji = TimerMath.normalizedEmoji(focusEmoji, default: "🍅")
         self.breakEmoji = TimerMath.normalizedEmoji(breakEmoji, default: "😌")
+
+        // Persist so the preferences survive relaunch.
+        settingsStore.save(SettingsStore.Values(
+            focusDuration: focusDuration,
+            breakDuration: breakDuration,
+            focusEmoji: self.focusEmoji,
+            breakEmoji: self.breakEmoji
+        ))
 
         if !isRunning {
             timeRemaining = isFocusMode ? focusDuration : breakDuration
