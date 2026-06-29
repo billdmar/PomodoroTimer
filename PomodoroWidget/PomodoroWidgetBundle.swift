@@ -14,7 +14,6 @@ import SwiftUI
 struct PomodoroWidgetBundle: WidgetBundle {
     var body: some Widget {
         PomodoroWidget()
-        // The Live Activity (Phase 8) is added here:
-        //   PomodoroLiveActivity()
+        PomodoroLiveActivity()
     }
 }

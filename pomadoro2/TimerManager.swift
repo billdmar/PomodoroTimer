@@ -44,6 +44,8 @@ class TimerManager: ObservableObject {
     private let sessionStore = SessionStore()
     private let statsPersistence = StatsPersistence()
     private let sharedSessionStore = SharedSessionStore()
+    // Min deployment is iOS 18.5, so the 16.1-gated controller is always usable.
+    private let liveActivity = LiveActivityController()
     private var cancellables = Set<AnyCancellable>()
 
     // Deadline-based timing: while running, `endDate` is the source of truth and
@@ -215,6 +217,9 @@ class TimerManager: ObservableObject {
         scheduleCompletionNotification()
         saveSession()
         publishSharedState()
+        if let endDate {
+            liveActivity.start(endDate: endDate, isFocusMode: isFocusMode, emoji: currentEmoji)
+        }
         startTick()
         Haptics.medium()
     }
@@ -239,6 +244,7 @@ class TimerManager: ObservableObject {
         // Persist the paused state so it survives a quit.
         saveSession()
         publishSharedState()
+        liveActivity.end()
     }
 
     // MARK: - Tick & deadline
