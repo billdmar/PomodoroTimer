@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct StarParticlesView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showStars = false
 
     var body: some View {
@@ -30,13 +31,17 @@ struct StarParticlesView: View {
                 .scaleEffect(showStars ? 2.0 : 0.3)
                 .rotationEffect(.degrees(showStars ? 360 : 0))
                 .animation(
-                    .easeOut(duration: 2.5)
+                    .easeOut(duration: DesignTokens.Animation.extended)
                     .delay(Double(index) * 0.1),
                     value: showStars
                 )
             }
         }
+        // Purely celebratory motion — skip it entirely under Reduce Motion.
+        .accessibilityHidden(true)
+        .opacity(reduceMotion ? 0 : 1)
         .onAppear {
+            guard !reduceMotion else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 showStars = true
             }

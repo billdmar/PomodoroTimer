@@ -21,6 +21,7 @@ struct LeaderboardView: View {
                     VStack(spacing: DesignTokens.Spacing.xxl) {
                         Text("🔐")
                             .font(.system(size: DesignTokens.Typography.displaySize))
+                            .accessibilityHidden(true)
 
                         Text("Join the Community!")
                             .font(.title)
@@ -87,6 +88,7 @@ struct LeaderboardView: View {
                                 VStack(spacing: DesignTokens.Spacing.md) {
                                     Text("🏆")
                                         .font(.system(size: DesignTokens.Typography.emojiSize))
+                                        .accessibilityHidden(true)
 
                                     Text("Global Leaderboard")
                                         .font(.title2)
@@ -116,6 +118,7 @@ struct LeaderboardView: View {
                                     VStack(spacing: DesignTokens.Spacing.md) {
                                         Text("🌱")
                                             .font(.system(size: 40))
+                                            .accessibilityHidden(true)
 
                                         Text("Be the first!")
                                             .font(.headline)
@@ -283,5 +286,7 @@ struct LeaderboardRow: View {
                         .stroke(isCurrentUser ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
                 )
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Rank \(rank): \(entry.displayName), \(entry.totalMinutes) minutes, \(entry.streak) day streak\(isCurrentUser ? ", you" : "")")
     }
 }

@@ -23,6 +23,7 @@ struct SettingsView: View {
                     VStack(spacing: DesignTokens.Spacing.md) {
                         Text(timerManager.currentEmoji)
                             .font(.system(size: DesignTokens.Typography.emojiSize))
+                            .accessibilityHidden(true)
 
                         Text("Timer Settings")
                             .font(.title2)
@@ -59,6 +60,7 @@ struct SettingsView: View {
                                         // Update timer manager immediately
                                         updateTimerSettings()
                                     }
+                                    .accessibilityLabel("Focus session emoji")
 
                                 Text("\(Int(focusMinutes)) min")
                                     .font(.title3)
@@ -72,6 +74,8 @@ struct SettingsView: View {
                                     // Update timer manager immediately when slider changes
                                     updateTimerSettings()
                                 }
+                                .accessibilityLabel("Focus duration")
+                                .accessibilityValue("\(Int(focusMinutes)) minutes")
                         }
                         .padding(.horizontal, DesignTokens.Spacing.xl)
                         .padding(.vertical, DesignTokens.Spacing.lg)
@@ -105,6 +109,7 @@ struct SettingsView: View {
                                         // Update timer manager immediately
                                         updateTimerSettings()
                                     }
+                                    .accessibilityLabel("Break session emoji")
 
                                 Text("\(Int(breakMinutes)) min")
                                     .font(.title3)
@@ -118,6 +123,8 @@ struct SettingsView: View {
                                     // Update timer manager immediately when slider changes
                                     updateTimerSettings()
                                 }
+                                .accessibilityLabel("Break duration")
+                                .accessibilityValue("\(Int(breakMinutes)) minutes")
                         }
                         .padding(.horizontal, DesignTokens.Spacing.xl)
                         .padding(.vertical, DesignTokens.Spacing.lg)
@@ -148,6 +155,7 @@ struct SettingsView: View {
                                                 .font(.body)
                                         }
                                         .buttonStyle(PlainButtonStyle())
+                                        .accessibilityLabel("Use \(emoji)")
                                     }
                                 }
 
@@ -169,6 +177,7 @@ struct SettingsView: View {
                                                 .font(.body)
                                         }
                                         .buttonStyle(PlainButtonStyle())
+                                        .accessibilityLabel("Use \(emoji)")
                                     }
                                 }
 
@@ -200,6 +209,7 @@ struct SettingsView: View {
                                         .foregroundColor(timerManager.isFocusMode ? .red : .green)
                                         .fontWeight(.bold)
                                 }
+                                .accessibilityElement(children: .combine)
 
                                 Spacer()
 
@@ -215,6 +225,7 @@ struct SettingsView: View {
                                         .fontWeight(.bold)
                                         .font(.system(.headline, design: .monospaced))
                                 }
+                                .accessibilityElement(children: .combine)
                             }
                         }
                         .padding(.horizontal, DesignTokens.Spacing.xl)
