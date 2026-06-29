@@ -20,6 +20,7 @@ struct StatsView: View {
                     VStack(spacing: 12) {
                         Text("📊")
                             .font(.system(size: DesignTokens.Typography.emojiSize))
+                            .accessibilityHidden(true)
 
                         Text("Your Progress")
                             .font(.title3)
@@ -107,6 +108,7 @@ struct StatsView: View {
                                 Capsule()
                                     .fill(Color.orange.opacity(0.1))
                             )
+                            .accessibilityElement(children: .combine)
                         }
 
                         // Compact Calendar Grid
@@ -248,6 +250,9 @@ struct TodayStatCard: View {
             RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card)
                 .fill(color.opacity(0.1))
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue("\(value) \(unit)")
     }
 }
 
@@ -316,6 +321,7 @@ struct CompactStreakCalendarView: View {
                     Circle()
                         .fill(Color.gray.opacity(0.3))
                         .frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
 
                     Text("No activity")
                         .font(.caption2)
@@ -326,6 +332,7 @@ struct CompactStreakCalendarView: View {
                     Circle()
                         .fill(Color.orange)
                         .frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
 
                     Text("Completed")
                         .font(.caption2)
@@ -407,6 +414,8 @@ struct CompactCalendarDayView: View {
                 )
         )
         .opacity(isInCurrentMonth ? 1.0 : 0.5)
+        .accessibilityLabel("\(calendar.component(.day, from: date))")
+        .accessibilityValue(hasActivity ? "Completed" : "No activity")
     }
 
     private var backgroundFill: Color {
@@ -455,5 +464,8 @@ struct AchievementBadge: View {
                         .stroke(isUnlocked ? Color.yellow.opacity(0.3) : Color.clear, lineWidth: 1)
                 )
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(isUnlocked ? "Unlocked. \(subtitle)" : "Locked. \(subtitle)")
     }
 }
