@@ -16,7 +16,11 @@ design choices are:
   a running session stores its `endDate`, and `timeRemaining` / `isRunning` are
   *derived* from an explicit `TimerState` enum. A lightweight async refresh loop
   drives the UI only — it is not the clock — which is what makes the timer
-  immune to background suspension and tick drift.
+  immune to background suspension and tick drift. This clock is encapsulated in
+  **`SessionEngine`** (a small `@MainActor` type that owns the `TimerState` + the
+  tick and reports via `onTick` / `onFinished`); `TimerManager` orchestrates
+  around it but no longer contains the timing machinery, so the safety-critical
+  countdown logic is small and independently testable.
 - **Pure logic and persistence are split out of the facade.** All deterministic
   rules (time math, streaks, stats accumulation, break cadence, achievements,
   goals, history aggregation) live in side-effect-free `enum`/`struct` types,
@@ -33,8 +37,9 @@ design choices are:
 | Layer | Types | Responsibility |
 | --- | --- | --- |
 | App entry | `pomadoro2App`, `AppDelegate` | Configure Firebase, register notification actions, host the root view |
-| Views | `ContentView`, `SettingsView`, `StatsView`, `LeaderboardView`, `WelcomeView`, plus extracted components (`ProgressRingView`, `DynamicBackgroundView`, `TimerComponents`, `HistoryChartView`, `TomatoButton`, `StarParticlesView`) | Presentation, animation, user input |
+| Views | `ContentView`, `SettingsView`, `StatsView`, `LeaderboardView`, `WelcomeView`, plus extracted components (`ProgressRingView`, `DynamicBackgroundView`, `TimerComponents`, `HistoryChartView`, `AchievementOverlay`, `TomatoButton`, `StarParticlesView`) | Presentation, animation, user input |
 | Facade / view model | `TimerManager` (`@MainActor`), `FirebaseManager`, `EnhancedAppLockManager` (aliased `AppLockManager`) | Orchestration, OS integration, networking |
+| Timer engine | `SessionEngine` (`@MainActor`) | Owns the `TimerState` machine + UI tick; reports via `onTick` / `onFinished` |
 | Pure logic | `TimerMath`, `StreakCalculator`, `StatsCalculator`, `BreakPolicy`, `AchievementEvaluator`, `GoalMath`, `HistoryAggregator`, `SessionRecovery` | Deterministic, unit-tested helpers |
 | State model | `TimerState` (+ `TimerConstants`), `StatsState`, `SessionSnapshot`, `SharedSessionState`, `PendingCommand` | Value types the logic and stores operate on |
 | Persistence | `SettingsStore`, `SessionStore`, `StatsPersistence`, `GoalStore`, `DailyHistoryStore`, `AppearanceSettingsStore`, `SharedSessionStore`, `PendingCommandStore` | Load/save to injectable `UserDefaults` (some via the App Group suite) |
@@ -71,9 +76,9 @@ design choices are:
 │ emoji, theme, │   │  enableExternalServices                   │lock│ Manager + ScreenTime│
 │ sound, goal   │   │  @Published isRunning, timeRemaining …    │    │ (nudges + shielding)│
 ├───────────────┤   │                                            │    └────────────────────┘
-│  StatsView    │◀──│  private var state: TimerState             │
-│ goal ring,    │   │   .idle / .running(endDate) / .paused      │
-│ streak cal,   │   │  tickTask (0.25s) → recompute() (UI only)  │
+│  StatsView    │◀──│  private let engine: SessionEngine ───────┐│
+│ goal ring,    │   │   owns TimerState .idle/.running/.paused  ││
+│ streak cal,   │   │   + tick (0.25s) → onTick / onFinished    ◀┘│
 │ achievements, │   │  delegates to pure logic + stores …        │
 │ history chart │   └───┬──────────┬──────────┬──────────┬───────┘
 ├───────────────┤       │          │          │          │
@@ -161,24 +166,26 @@ Everything visible is derived from it:
 - `state.hasCompleted(now:)` is simply `now >= endDate`
   (`TimerMath.hasCompleted(endDate:now:)`).
 
-`TimerManager` keeps `private var state: TimerState`; its `didSet` mirrors
-`isRunning = state.isRunning`. The `@Published var timeRemaining` the views bind
-to is recomputed from the deadline, not decremented.
+**`SessionEngine`** ([`SessionEngine.swift`](../pomadoro2/SessionEngine.swift))
+owns `state: TimerState` and the tick. `TimerManager` holds the engine and
+mirrors its reports into the `@Published var timeRemaining` / `isRunning` the
+views bind to — those are recomputed from the deadline, never decremented.
 
 ### Why this is background-safe
 
-A `tickTask` — a single `Task` sleeping `TimerConstants.tickInterval` (0.25s)
-between iterations — only calls `recompute()` to refresh `timeRemaining` for a
-smooth ring. It is explicitly **not** the clock. Because completion is decided
-by `Date >= endDate`, a delayed, throttled, or entirely skipped tick (e.g.
-while the app is suspended in the background) never loses or gains time:
+The engine's tick — a single `Task` sleeping `TimerConstants.tickInterval`
+(0.25s) between iterations — only calls `recompute()` to refresh `timeRemaining`
+for a smooth ring. It is explicitly **not** the clock. Because completion is
+decided by `Date >= endDate`, a delayed, throttled, or entirely skipped tick
+(e.g. while the app is suspended in the background) never loses or gains time:
 
-- `recompute()` recomputes `timeRemaining` from `state` and, if the deadline has
-  passed, calls `timerCompleted()`. It is the single completion path, shared by
-  the tick and by foreground/recovery.
-- `handleScenePhase(_:)` calls `recompute()` on `.active` (recovering any time
-  that elapsed while suspended, completing the session if its deadline passed)
-  and persists a `SessionSnapshot` on `.background`.
+- `SessionEngine.recompute()` recomputes remaining from `state` and, if the
+  deadline has passed, leaves the running state and fires `onFinished`, which
+  `TimerManager` handles in `timerCompleted()`. It is the single completion
+  path, shared by the tick and by foreground/recovery.
+- `TimerManager.handleScenePhase(_:)` calls `recompute()` on `.active`
+  (recovering any time that elapsed while suspended, completing the session if
+  its deadline passed) and persists a `SessionSnapshot` on `.background`.
 
 `TimerConstants` ([`TimerState.swift`](../pomadoro2/TimerState.swift)) names the
 tunables (default focus 25m / break 5m / long break 15m, the 0.25s tick, the
@@ -399,7 +406,7 @@ the `QuickStatCard`/`ControlButton`/`FloatingButton` components in
 
 ## Build, test & tooling
 
-- **Unit tests** (`pomadoro2Tests`, ~95 [Swift Testing](https://developer.apple.com/documentation/testing)
+- **Unit tests** (`pomadoro2Tests`, 100+ [Swift Testing](https://developer.apple.com/documentation/testing)
   `@Test` cases across `TimerStateTests`, `TimerManagerTests`, `StatsStoreTests`,
   `SessionRecoveryTests`, `SettingsStoreTests`, `AchievementsAndBreaksTests`,
   `GoalsAndHistoryTests`, `AppearanceSettingsTests`, `PendingCommandStoreTests`,

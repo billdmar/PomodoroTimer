@@ -19,7 +19,7 @@ A polished Pomodoro focus-timer for iOS. Run customizable focus, short-break, an
 - **Focus, short-break & long-break cycles** — 25-minute focus and 5-minute break sessions by default, each fully customizable. A longer break automatically follows every 4th focus session, with its own configurable duration.
 - **Crash & quit recovery** — An interrupted session is snapshotted and restored on relaunch at the correct remaining time; settings persist across launches.
 - **Daily focus goal** — Set a daily minutes target and watch a progress ring fill as you complete sessions.
-- **Achievements** — Earn milestone badges (first session, five sessions in a day, 7- and 30-day streaks, 100 sessions, 1000 focus minutes) surfaced in the Stats screen.
+- **Achievements** — Earn milestone badges (first session, five sessions in a day, 7- and 30-day streaks, 100 sessions, 1000 focus minutes) surfaced in the Stats screen, with an "Achievement Unlocked!" celebration the moment you earn one.
 - **Focus history charts** — Weekly and monthly bar charts (built with Swift Charts) visualize your focus minutes over time, backed by a local daily-history store.
 - **Live Activity, widget & Control Center** — A Dynamic Island / Lock-screen Live Activity and a Home/Lock-screen WidgetKit widget show the running session at a glance, plus an iOS 18 Control Center "Start Focus" control.
 - **Siri & Shortcuts** — App Intents expose "Start Focus" and "Check Streak" to Siri, Spotlight, and the Shortcuts app.
@@ -80,10 +80,12 @@ pomadoro2/
 ├── SettingsView.swift          # Durations, goal, theme & sound customization
 ├── StatsView.swift             # Stats, streak calendar & achievement badges
 ├── HistoryChartView.swift      # Weekly / monthly focus charts (Swift Charts)
+├── AchievementOverlay.swift    # "Achievement Unlocked!" celebration overlay
 ├── LeaderboardView.swift       # Global leaderboard UI
 │
 │   # ── Timer engine ────────────────────────────────────────────
-├── TimerManager.swift          # Timer engine + session orchestration (facade); DI-testable
+├── TimerManager.swift          # Session orchestration facade (DI-testable)
+├── SessionEngine.swift         # The countdown clock: TimerState + tick — unit-tested
 ├── TimerMath.swift             # Pure timer helpers (formatting, progress, deadline) — unit-tested
 ├── TimerState.swift            # Timer state machine (modes / transitions) — unit-tested
 ├── BreakPolicy.swift           # Short- vs. long-break cycle logic (every 4th focus) — unit-tested
@@ -118,7 +120,7 @@ PomodoroWidget/                 # Separate target (WidgetKit + ActivityKit)
 ├── PomodoroLiveActivity.swift  # Live Activity / Dynamic Island UI
 └── PomodoroControl.swift       # Control Center "Start Focus" control (iOS 18)
 
-pomadoro2Tests/                 # Swift Testing unit tests (~95 cases)
+pomadoro2Tests/                 # Swift Testing unit tests (100+ cases)
 pomadoro2UITests/               # XCUITest smoke tests
 scripts/check-coverage.sh       # Coverage gate for the pure-logic files
 firestore.rules                 # Least-privilege Firestore security rules
@@ -146,7 +148,7 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-- **Unit tests** ([`pomadoro2Tests`](pomadoro2Tests)) — ~95 cases with the [Swift Testing](https://developer.apple.com/documentation/testing) framework cover the business logic: timer formatting/progress and the deadline countdown (`TimerMath`), the timer **state machine** (`TimerState`), short-/long-break cycles (`BreakPolicy`), streak transitions (`StreakCalculator`), stats accumulation/merge (`StatsStore`), settings persistence (`SettingsStore`), theme/appearance (`AppearanceSettings`), daily goals (`GoalStore`), focus-history aggregation (`DailyHistoryStore`), achievement evaluation (`Achievements`), pending widget/intent commands (`PendingCommandStore`), shared widget state (`SharedSessionState`), and crash/quit recovery (`SessionStore`). All time-dependent logic takes an injected clock so tests are deterministic.
+- **Unit tests** ([`pomadoro2Tests`](pomadoro2Tests)) — 100+ cases with the [Swift Testing](https://developer.apple.com/documentation/testing) framework cover the business logic: timer formatting/progress and the deadline countdown (`TimerMath`), the timer **state machine** (`TimerState`), short-/long-break cycles (`BreakPolicy`), streak transitions (`StreakCalculator`), stats accumulation/merge (`StatsStore`), settings persistence (`SettingsStore`), theme/appearance (`AppearanceSettings`), daily goals (`GoalStore`), focus-history aggregation (`DailyHistoryStore`), achievement evaluation (`Achievements`), pending widget/intent commands (`PendingCommandStore`), shared widget state (`SharedSessionState`), and crash/quit recovery (`SessionStore`). All time-dependent logic takes an injected clock so tests are deterministic.
 - **Testable timer engine** — `TimerManager` itself is exercised by tests via **dependency injection**: it accepts a protocol-backed backend, so a mock stands in for Firebase and the full session-orchestration flow can be asserted without a network or device.
 - **UI smoke tests** ([`pomadoro2UITests`](pomadoro2UITests)) verify the app launches to the timer screen and that starting a session shows the running timer.
 - Every push and pull request runs **SwiftLint**, the build, the unit suite, and a **code-coverage gate** (on the pure-logic files, discovered by naming convention) on an iOS Simulator via [GitHub Actions](.github/workflows/ci.yml).
