@@ -1,0 +1,51 @@
+# SwiftLint configuration for PomodoroTimer.
+# CI runs `swiftlint lint` (non-strict): the build fails on errors only, while
+# warnings surface as a quality signal. Length thresholds are deliberately
+# generous today because ContentView/TimerManager are being decomposed across
+# the enhancement phases; they tighten once those land.
+
+included:
+  - pomadoro2
+  - pomadoro2Tests
+  - pomadoro2UITests
+
+excluded:
+  - .build
+  - pomadoro2/GoogleService-Info.plist
+
+# Math / loop idioms and well-known short names are fine.
+identifier_name:
+  min_length:
+    warning: 2
+  excluded:
+    - x
+    - y
+    - i
+    - id
+    - db
+    - vm
+
+# `pomadoro2App` is the @main entry point; renaming the product type is out of
+# scope and risks signing/Info.plist breakage.
+type_name:
+  excluded:
+    - pomadoro2App
+    - pomadoro2UITests
+    - pomadoro2UITestsLaunchTests
+
+# Generous while the monolith is being split (Phase 4/5 brings these down).
+file_length:
+  warning: 600
+  error: 1200
+
+type_body_length:
+  warning: 400
+  error: 700
+
+function_body_length:
+  warning: 100
+  error: 200
+
+line_length:
+  warning: 140
+  error: 200

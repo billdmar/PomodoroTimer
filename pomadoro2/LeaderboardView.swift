@@ -12,7 +12,7 @@ struct LeaderboardView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var leaderboardEntries: [LeaderboardEntry] = []
     @State private var isLoading = true
-    
+
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
@@ -21,17 +21,17 @@ struct LeaderboardView: View {
                     VStack(spacing: 30) {
                         Text("🔐")
                             .font(.system(size: 80))
-                        
+
                         Text("Join the Community!")
                             .font(.title)
                             .fontWeight(.bold)
-                        
+
                         Text("Sign in to see how you compare with other Pomodoro masters around the world.")
                             .font(.body)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
-                        
+
                         Button(action: {
                             firebaseManager.signInAnonymously(userInitiated: true)
                         }) {
@@ -56,7 +56,7 @@ struct LeaderboardView: View {
                         }
                         .disabled(firebaseManager.isLoading)
                         .padding(.horizontal, 40)
-                        
+
                         if let errorMessage = firebaseManager.errorMessage {
                             Text(errorMessage)
                                 .font(.caption)
@@ -64,7 +64,7 @@ struct LeaderboardView: View {
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 40)
                         }
-                        
+
                         Spacer()
                     }
                     .padding(.top, 50)
@@ -87,19 +87,19 @@ struct LeaderboardView: View {
                                 VStack(spacing: 16) {
                                     Text("🏆")
                                         .font(.system(size: 50))
-                                    
+
                                     Text("Global Leaderboard")
                                         .font(.title2)
                                         .fontWeight(.bold)
                                         .foregroundColor(.primary)
-                                    
+
                                     Text("Top Pomodoro Masters")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
                                 .padding(.top, 30)
                                 .padding(.bottom, 10)
-                                
+
                                 // Leaderboard entries
                                 LazyVStack(spacing: 12) {
                                     ForEach(Array(leaderboardEntries.enumerated()), id: \.element.id) { index, entry in
@@ -111,16 +111,16 @@ struct LeaderboardView: View {
                                     }
                                 }
                                 .padding(.horizontal, 20)
-                                
+
                                 if leaderboardEntries.isEmpty {
                                     VStack(spacing: 16) {
                                         Text("🌱")
                                             .font(.system(size: 40))
-                                        
+
                                         Text("Be the first!")
                                             .font(.headline)
                                             .foregroundColor(.primary)
-                                        
+
                                         Text("Complete a focus session to appear on the leaderboard.")
                                             .font(.body)
                                             .foregroundColor(.secondary)
@@ -129,7 +129,7 @@ struct LeaderboardView: View {
                                     .padding(.top, 40)
                                     .padding(.horizontal, 40)
                                 }
-                                
+
                                 Spacer(minLength: 50)
                             }
                         }
@@ -145,7 +145,7 @@ struct LeaderboardView: View {
                         dismiss()
                     }
                 }
-                
+
                 if firebaseManager.isAuthenticated && !isLoading {
                     ToolbarItem(placement: .primaryAction) {
                         Button(action: {
@@ -168,7 +168,7 @@ struct LeaderboardView: View {
             }
         }
     }
-    
+
     private func loadLeaderboard() {
         isLoading = true
         firebaseManager.getLeaderboard { entries in
@@ -182,7 +182,7 @@ struct LeaderboardRow: View {
     let rank: Int
     let entry: LeaderboardEntry
     let isCurrentUser: Bool
-    
+
     private var rankColor: Color {
         switch rank {
         case 1: return .yellow
@@ -191,7 +191,7 @@ struct LeaderboardRow: View {
         default: return .blue
         }
     }
-    
+
     private var rankEmoji: String {
         switch rank {
         case 1: return "🥇"
@@ -200,7 +200,7 @@ struct LeaderboardRow: View {
         default: return "🏅"
         }
     }
-    
+
     var body: some View {
         HStack(spacing: 16) {
             // Rank badge
@@ -208,7 +208,7 @@ struct LeaderboardRow: View {
                 Circle()
                     .fill(rankColor.opacity(0.2))
                     .frame(width: 40, height: 40)
-                
+
                 if rank <= 3 {
                     Text(rankEmoji)
                         .font(.title3)
@@ -219,7 +219,7 @@ struct LeaderboardRow: View {
                         .foregroundColor(rankColor)
                 }
             }
-            
+
             // User info
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -227,17 +227,17 @@ struct LeaderboardRow: View {
                         .font(.headline)
                         .foregroundColor(.primary)
                         .fontWeight(isCurrentUser ? .bold : .medium)
-                    
+
                     if isCurrentUser {
                         Text("(You)")
                             .font(.caption)
                             .foregroundColor(.blue)
                             .fontWeight(.medium)
                     }
-                    
+
                     Spacer()
                 }
-                
+
                 HStack(spacing: 16) {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
@@ -247,7 +247,7 @@ struct LeaderboardRow: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    
+
                     HStack(spacing: 4) {
                         Image(systemName: "flame")
                             .font(.caption)
@@ -256,18 +256,18 @@ struct LeaderboardRow: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    
+
                     Spacer()
                 }
             }
-            
+
             // Total minutes display
             VStack(alignment: .trailing, spacing: 2) {
                 Text(entry.formattedMinutes)
                     .font(.title3)
                     .fontWeight(.bold)
                     .foregroundColor(rankColor)
-                
+
                 Text("focus time")
                     .font(.caption2)
                     .foregroundColor(.secondary)

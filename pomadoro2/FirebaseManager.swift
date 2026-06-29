@@ -17,20 +17,20 @@ class FirebaseManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var isOnline = true
-    
+
     private let db = Firestore.firestore()
     private let auth = Auth.auth()
     private let networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "NetworkMonitor")
     private var authStateHandle: AuthStateDidChangeListenerHandle?
-    
+
     init() {
         setupNetworkMonitoring()
         checkAuthStatus()
     }
-    
+
     // MARK: - Network Monitoring
-    
+
     private func setupNetworkMonitoring() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
             DispatchQueue.main.async {
@@ -44,9 +44,9 @@ class FirebaseManager: ObservableObject {
         }
         networkMonitor.start(queue: networkQueue)
     }
-    
+
     // MARK: - Authentication
-    
+
     func checkAuthStatus() {
         authStateHandle = auth.addStateDidChangeListener { [weak self] _, user in
             DispatchQueue.main.async {
@@ -58,7 +58,7 @@ class FirebaseManager: ObservableObject {
             }
         }
     }
-    
+
     /// Signs in anonymously.
     /// - Parameter userInitiated: When `true` (a tap on "Join"), failures are
     ///   surfaced to `errorMessage`. The silent auto-sign-in at launch passes
@@ -74,7 +74,7 @@ class FirebaseManager: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        auth.signInAnonymously { [weak self] result, error in
+        auth.signInAnonymously { [weak self] _, error in
             DispatchQueue.main.async {
                 self?.isLoading = false
 
@@ -90,7 +90,7 @@ class FirebaseManager: ObservableObject {
             }
         }
     }
-    
+
     func signOut() {
         do {
             try auth.signOut()
@@ -99,9 +99,9 @@ class FirebaseManager: ObservableObject {
             errorMessage = friendlyErrorMessage(for: error)
         }
     }
-    
+
     // MARK: - User Stats
-    
+
     func saveUserStats(focusMinutes: Int, totalMinutes: Int, streak: Int) {
         guard let userId = currentUser?.uid else {
             Log.debug("No authenticated user")
@@ -112,7 +112,7 @@ class FirebaseManager: ObservableObject {
             Log.debug("Offline - stats will sync when connection is restored")
             return
         }
-        
+
         let data: [String: Any] = [
             "userId": userId,
             "todayFocusMinutes": focusMinutes,
@@ -121,7 +121,7 @@ class FirebaseManager: ObservableObject {
             "lastUpdated": FieldValue.serverTimestamp(),
             "lastCompletionDate": Date()
         ]
-        
+
         db.collection("userStats").document(userId).setData(data, merge: true) { error in
             if let error = error {
                 Log.debug("Error saving user stats: \(error)")
@@ -130,7 +130,7 @@ class FirebaseManager: ObservableObject {
             }
         }
     }
-    
+
     func loadUserStats(completion: @escaping (Int, Int, Int) -> Void) {
         guard let userId = currentUser?.uid else {
             Log.debug("No authenticated user")
@@ -157,26 +157,26 @@ class FirebaseManager: ObservableObject {
                 completion(0, 0, 0)
                 return
             }
-            
+
             let todayMinutes = data["todayFocusMinutes"] as? Int ?? 0
             let totalMinutes = data["totalFocusMinutes"] as? Int ?? 0
             let streak = data["currentStreak"] as? Int ?? 0
-            
+
             DispatchQueue.main.async {
                 completion(todayMinutes, totalMinutes, streak)
             }
         }
     }
-    
+
     // MARK: - Leaderboard
-    
+
     func getLeaderboard(limit: Int = 10, completion: @escaping ([LeaderboardEntry]) -> Void) {
         guard isOnline else {
             Log.debug("Offline - cannot load leaderboard")
             completion([])
             return
         }
-        
+
         db.collection("userStats")
             .order(by: "totalFocusMinutes", descending: true)
             .limit(to: limit)
@@ -186,7 +186,7 @@ class FirebaseManager: ObservableObject {
                     completion([])
                     return
                 }
-                
+
                 let entries = snapshot?.documents.compactMap { document -> LeaderboardEntry? in
                     let data = document.data()
                     return LeaderboardEntry(
@@ -196,15 +196,15 @@ class FirebaseManager: ObservableObject {
                         lastActive: (data["lastUpdated"] as? Timestamp)?.dateValue() ?? Date()
                     )
                 } ?? []
-                
+
                 DispatchQueue.main.async {
                     completion(entries)
                 }
             }
     }
-    
+
     // MARK: - Focus Sessions
-    
+
     func logFocusSession(duration: Int, completedAt: Date = Date()) {
         guard let userId = currentUser?.uid else {
             Log.debug("No authenticated user")
@@ -215,14 +215,14 @@ class FirebaseManager: ObservableObject {
             Log.debug("Offline - session will be logged when connection is restored")
             return
         }
-        
+
         let sessionData: [String: Any] = [
             "userId": userId,
             "duration": duration,
             "completedAt": completedAt,
             "timestamp": FieldValue.serverTimestamp()
         ]
-        
+
         db.collection("focusSessions").addDocument(data: sessionData) { error in
             if let error = error {
                 Log.debug("Error logging focus session: \(error)")
@@ -231,9 +231,9 @@ class FirebaseManager: ObservableObject {
             }
         }
     }
-    
+
     // MARK: - Error Handling
-    
+
     private func friendlyErrorMessage(for error: Error) -> String {
         if let authError = error as? AuthErrorCode {
             switch authError.code {
@@ -247,14 +247,14 @@ class FirebaseManager: ObservableObject {
                 return "Authentication failed. Please try again."
             }
         }
-        
+
         if error.localizedDescription.contains("network") {
             return "Network connection problem. Please check your internet and try again."
         }
-        
+
         return error.localizedDescription
     }
-    
+
     deinit {
         networkMonitor.cancel()
         if let handle = authStateHandle {
@@ -271,16 +271,16 @@ struct LeaderboardEntry: Identifiable {
     let totalMinutes: Int
     let streak: Int
     let lastActive: Date
-    
+
     var displayName: String {
         // For anonymous users, show a fun name
         return "Pomodoro Master \(userId.prefix(6))"
     }
-    
+
     var formattedMinutes: String {
         let hours = totalMinutes / 60
         let minutes = totalMinutes % 60
-        
+
         if hours > 0 {
             return "\(hours)h \(minutes)m"
         } else {
