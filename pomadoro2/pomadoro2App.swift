@@ -8,11 +8,15 @@
 import SwiftUI
 import Firebase
 import UIKit
+import UserNotifications
 
 // Add AppDelegate class to properly conform to UIApplicationDelegate
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         FirebaseApp.configure()
+        // Handle interactive notification actions (e.g. "Extend +5 min").
+        UNUserNotificationCenter.current().delegate = NotificationActionHandler.shared
+        NotificationActions.registerCategories()
         return true
     }
 }

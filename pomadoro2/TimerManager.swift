@@ -48,6 +48,11 @@ class TimerManager: ObservableObject {
     /// Daily focus goal in minutes (drives the goal ring).
     @Published var dailyGoalMinutes: Int = GoalStore.defaultGoalMinutes
 
+    // Appearance + sound preferences.
+    @Published var accentTheme: AccentTheme = .tomato
+    @Published var appearanceMode: AppearanceMode = .system
+    @Published var completionSound: CompletionSound = .classic
+
     /// 0...1 progress toward today's goal.
     var goalProgress: Double {
         GoalMath.progress(focusMinutesToday: todayFocusMinutes, goalMinutes: dailyGoalMinutes)
@@ -72,6 +77,7 @@ class TimerManager: ObservableObject {
     private let sharedSessionStore = SharedSessionStore()
     private let goalStore = GoalStore()
     private let historyStore = DailyHistoryStore()
+    private let appearanceStore = AppearanceSettingsStore()
     // Min deployment is iOS 18.5, so the 16.1-gated controller is always usable.
     private let liveActivity = LiveActivityController()
     private var cancellables = Set<AnyCancellable>()
@@ -106,12 +112,53 @@ class TimerManager: ObservableObject {
         breakEmoji = values.breakEmoji
         longBreakDuration = values.longBreakDuration
         dailyGoalMinutes = goalStore.loadGoalMinutes()
+
+        let appearance = appearanceStore.load()
+        accentTheme = appearance.accent
+        appearanceMode = appearance.appearance
+        completionSound = appearance.completionSound
     }
 
     /// Updates and persists the daily focus goal.
     func setDailyGoal(minutes: Int) {
         dailyGoalMinutes = max(0, minutes)
         goalStore.save(goalMinutes: dailyGoalMinutes)
+    }
+
+    /// Updates and persists appearance + sound preferences.
+    func updateAppearance(accent: AccentTheme, appearance: AppearanceMode, sound: CompletionSound) {
+        accentTheme = accent
+        appearanceMode = appearance
+        completionSound = sound
+        appearanceStore.save(AppearanceSettingsStore.Values(
+            accent: accent, appearance: appearance, completionSound: sound
+        ))
+    }
+
+    /// Adds time to a running (or paused) session — wired to the notification's
+    /// "Extend +5 min" action and usable from the UI.
+    func extend(byMinutes minutes: Int = 5) {
+        let added = TimeInterval(minutes * 60)
+        switch state {
+        case .running:
+            // Re-anchor the deadline and reschedule the completion notification.
+            cancelCompletionNotification()
+            let newEnd = Date().addingTimeInterval(state.remaining(now: Date()) + added)
+            state = .running(endDate: newEnd)
+            timeRemaining = state.remaining(now: Date())
+            scheduleCompletionNotification(endDate: newEnd)
+            saveSession()
+            publishSharedState()
+            liveActivity.update(endDate: newEnd, isFocusMode: isFocusMode, emoji: currentEmoji)
+        case let .paused(remaining):
+            let updated = remaining + added
+            state = .paused(remaining: updated)
+            timeRemaining = updated
+        case let .idle(remaining):
+            let updated = remaining + added
+            state = .idle(remaining: updated)
+            timeRemaining = updated
+        }
     }
 
     /// Restores an interrupted session (the app was quit/crashed mid-timer).
@@ -180,6 +227,14 @@ class TimerManager: ObservableObject {
                 if isAuthenticated {
                     self?.syncWithFirebase()
                 }
+            }
+            .store(in: &cancellables)
+
+        // The "Extend +5 min" notification action posts this; add time here.
+        NotificationCenter.default.publisher(for: NotificationActions.extendRequested)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.extend(byMinutes: 5)
             }
             .store(in: &cancellables)
     }
@@ -278,6 +333,8 @@ class TimerManager: ObservableObject {
         content.title = "Pomodoro Timer Complete! 🍅"
         content.body = "\(completedMode) session finished! Ready for \(nextMode) time?"
         content.sound = .default
+        // Enables the "Extend +5 min" action (handled by NotificationActionHandler).
+        content.categoryIdentifier = NotificationActions.completionCategoryID
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
         let request = UNNotificationRequest(
@@ -361,7 +418,9 @@ class TimerManager: ObservableObject {
         // In-app feedback. The scheduled completion notification (set at start)
         // covers the case where the app is backgrounded/suspended at the
         // deadline; pauseTimer() above cancels it so we never double-notify.
-        AudioServicesPlaySystemSound(TimerConstants.completionSoundID)
+        if let soundID = completionSound.systemSoundID {
+            AudioServicesPlaySystemSound(soundID)
+        }
         Haptics.success()
 
         // Unlock app when session completes
