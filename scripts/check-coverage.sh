@@ -18,6 +18,7 @@ GATED_FILES=(
   "StreakCalculator.swift"
   "SettingsStore.swift"
   "SessionStore.swift"
+  "StatsStore.swift"
 )
 
 report="$(xcrun xccov view --report --json "$XCRESULT")"
