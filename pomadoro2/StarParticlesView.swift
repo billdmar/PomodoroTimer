@@ -9,7 +9,7 @@ import SwiftUI
 
 struct StarParticlesView: View {
     @State private var showStars = false
-    
+
     var body: some View {
         ZStack {
             ForEach(0..<12, id: \.self) { index in
@@ -42,7 +42,7 @@ struct StarParticlesView: View {
             }
         }
     }
-    
+
     private func starOffset(for index: Int) -> CGSize {
         let angle = Double(index) * .pi * 2 / 12
         let distance: CGFloat = CGFloat(100 + (index % 3) * 30)

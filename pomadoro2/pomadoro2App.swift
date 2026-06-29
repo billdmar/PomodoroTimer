@@ -11,7 +11,7 @@ import UIKit
 
 // Add AppDelegate class to properly conform to UIApplicationDelegate
 class AppDelegate: NSObject, UIApplicationDelegate {
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         FirebaseApp.configure()
         return true
     }
@@ -21,7 +21,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct pomadoro2App: App {
     // Register the AppDelegate
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    
+
     var body: some Scene {
         WindowGroup {
             ContentView()

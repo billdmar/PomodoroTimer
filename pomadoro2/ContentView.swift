@@ -19,18 +19,18 @@ struct ContentView: View {
     @State private var colorShift: CGFloat = 0
     @State private var emojiHovered = false
     @State private var showingSkipConfirmation = false
-    
+
     // Animation state for smooth transitions
     @State private var isTransitioning = false
     @State private var scaleEffect: CGFloat = 1.0
     @State private var backgroundOpacity: Double = 1.0
-    
+
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 // Background layers with smooth transitions
                 backgroundView
-                
+
                 // Main content with transition animations
                 if showingWelcome {
                     WelcomeView(showingWelcome: $showingWelcome)
@@ -42,7 +42,7 @@ struct ContentView: View {
                             .opacity(timerManager.isRunning ? 0 : 1)
                             .scaleEffect(timerManager.isRunning ? 0.95 : 1)
                             .animation(.easeInOut(duration: 0.6), value: timerManager.isRunning)
-                        
+
                         // Full screen timer view (overlays when running)
                         if timerManager.isRunning {
                             fullScreenTimerView(geometry: geometry)
@@ -51,7 +51,7 @@ struct ContentView: View {
                         }
                     }
                 }
-                
+
                 // App lock overlay - only show when trying to leave app, not during normal use
                 if timerManager.appLockManager.isAppLocked && timerManager.appLockManager.showingUnlockAlert {
                     AppLockOverlay(appLockManager: timerManager.appLockManager)
@@ -122,7 +122,7 @@ struct ContentView: View {
                 scaleEffect = newValue ? 1.1 : 1.0
                 backgroundOpacity = newValue ? 0.8 : 1.0
             }
-            
+
             // Reset transition state
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 withAnimation(.easeInOut(duration: 0.3)) {
@@ -140,54 +140,54 @@ struct ContentView: View {
                     Text("🐛 DEBUG PANEL")
                         .font(.caption)
                         .fontWeight(.bold)
-                    
+
                     // Auth & User Info
                     VStack(spacing: 4) {
                         Text("AUTH STATUS")
                             .font(.caption2)
                             .fontWeight(.semibold)
-                        
+
                         HStack(spacing: 8) {
                             Button("Check User") {
                                 timerManager.debugPrintCurrentUser()
                             }
                             .debugButtonStyle(.blue)
-                            
+
                             Button("Timer Status") {
                                 timerManager.debugPrintTimerStatus()
                             }
                             .debugButtonStyle(.cyan)
-                            
+
                             Button("Sign Out") {
                                 timerManager.firebaseManagerPublished.signOut()
                             }
                             .debugButtonStyle(.orange)
                         }
                     }
-                    
+
                     // Stats Testing
                     VStack(spacing: 4) {
                         Text("STATS TESTING")
                             .font(.caption2)
                             .fontWeight(.semibold)
-                        
+
                         HStack(spacing: 8) {
                             Button("Full Session") {
                                 timerManager.debugCompleteSession()
                             }
                             .debugButtonStyle(.green)
-                            
+
                             Button("Partial Session") {
                                 timerManager.debugCompletePartialSession()
                             }
                             .debugButtonStyle(.mint)
-                            
+
                             Button("+5 Min") {
                                 timerManager.debugAdd5Minutes()
                             }
                             .debugButtonStyle(.teal)
                         }
-                        
+
                         HStack(spacing: 8) {
                             Button("Reset Stats") {
                                 timerManager.debugResetStats()
@@ -195,36 +195,36 @@ struct ContentView: View {
                             .debugButtonStyle(.red)
                         }
                     }
-                    
+
                     // Leaderboard Testing
                     VStack(spacing: 4) {
                         Text("LEADERBOARD TESTING")
                             .font(.caption2)
                             .fontWeight(.semibold)
-                        
+
                         HStack(spacing: 8) {
                             Button("Create Test Data") {
                                 timerManager.createTestLeaderboardData()
                             }
                             .debugButtonStyle(.purple)
-                            
+
                             Button("Clear Test Data") {
                                 timerManager.clearTestData()
                             }
                             .debugButtonStyle(.gray)
                         }
                     }
-                    
+
                     // Current Stats Display
                     VStack(spacing: 2) {
                         Text("CURRENT STATS")
                             .font(.caption2)
                             .fontWeight(.semibold)
-                        
+
                         Text("Today: \(timerManager.todayFocusMinutes) | Total: \(timerManager.totalFocusMinutes) | Streak: \(timerManager.currentStreak)")
                             .font(.caption2)
                             .foregroundColor(.secondary)
-                        
+
                         Text("Auth: \(timerManager.firebaseManagerPublished.isAuthenticated ? "✅" : "❌") | Online: \(timerManager.firebaseManagerPublished.isOnline ? "🟢" : "🔴")")
                             .font(.caption2)
                             .foregroundColor(.secondary)
@@ -238,9 +238,9 @@ struct ContentView: View {
             .cornerRadius(8)
             .padding()
         }
-        
+
         Spacer()
-        
+
         HStack {
             Spacer()
             Button(action: {
@@ -255,9 +255,9 @@ struct ContentView: View {
 )
 #endif
     }
-    
+
     // MARK: - Background View with Smooth Transitions
-    
+
     private var backgroundView: some View {
         ZStack {
             if timerManager.isRunning {
@@ -280,7 +280,7 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.8), value: timerManager.isRunning)
     }
-    
+
     private var dynamicColorBackground: some View {
         ZStack {
             if timerManager.isFocusMode {
@@ -306,7 +306,7 @@ struct ContentView: View {
                 )
                 .ignoresSafeArea()
             }
-            
+
             // Shifting overlay that moves the gradient around
             LinearGradient(
                 gradient: Gradient(colors: timerManager.isFocusMode ? [
@@ -327,7 +327,7 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
             .blendMode(.overlay)
-            
+
             // Second shifting layer for more movement
             RadialGradient(
                 gradient: Gradient(colors: timerManager.isFocusMode ? [
@@ -352,9 +352,9 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 1.0), value: timerManager.isRunning)
         .animation(.easeInOut(duration: 0.8), value: timerManager.isFocusMode)
     }
-    
+
     // MARK: - Main Timer View
-    
+
     private var mainTimerView: some View {
         VStack(spacing: 0) {
             // Header with stats button in top right
@@ -363,15 +363,15 @@ struct ContentView: View {
                     Text("🍅 Pomodoro")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundColor(.primary)
-                    
+
                     Text(timerManager.isFocusMode ? "Focus Time" : "Break Time")
                         .font(.title3)
                         .foregroundColor(timerManager.isFocusMode ? .red : .green)
                         .fontWeight(.medium)
                 }
-                
+
                 Spacer()
-                
+
                 // Stats button in top right
                 Button(action: {
                     showingStats = true
@@ -392,7 +392,7 @@ struct ContentView: View {
             .padding(.horizontal, 30)
             .padding(.top, 10)
             .frame(height: 80)
-            
+
             // Today's quick stats section
             HStack(spacing: 20) {
                 QuickStatCard(
@@ -401,14 +401,14 @@ struct ContentView: View {
                     label: "Today's Focus",
                     color: .red
                 )
-                
+
                 QuickStatCard(
                     icon: "flame.fill",
                     value: "\(timerManager.currentStreak)",
                     label: "Day Streak",
                     color: .orange
                 )
-                
+
                 QuickStatCard(
                     icon: "clock.fill",
                     value: "\(timerManager.totalFocusMinutes)",
@@ -418,7 +418,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 30)
             .padding(.vertical, 20)
-            
+
             // Main timer section
             VStack(spacing: 20) {
                 // Emoji section - moved up
@@ -428,7 +428,7 @@ struct ContentView: View {
                         .scaleEffect(scaleEffect)
                         .animation(.spring(response: 0.5, dampingFraction: 0.7), value: timerManager.currentEmoji)
                         .animation(.easeInOut(duration: 0.3), value: scaleEffect)
-                    
+
                     // Helper text
                     if !timerManager.isRunning {
                         Text("Tap timer to start \(timerManager.isFocusMode ? "focus" : "break") session")
@@ -441,7 +441,7 @@ struct ContentView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                
+
                 // Timer display with modern design
                 ZStack {
                     // Outer glow effect
@@ -460,7 +460,7 @@ struct ContentView: View {
                         .frame(width: 280, height: 280)
                         .scaleEffect(scaleEffect)
                         .animation(.easeInOut(duration: 0.3), value: scaleEffect)
-                    
+
                     // Background circle with subtle shadow
                     Circle()
                         .fill(Color(.systemBackground))
@@ -468,7 +468,7 @@ struct ContentView: View {
                         .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
                         .scaleEffect(scaleEffect)
                         .animation(.easeInOut(duration: 0.3), value: scaleEffect)
-                    
+
                     // Progress circle
                     Circle()
                         .trim(from: 0, to: timerManager.progress)
@@ -487,7 +487,7 @@ struct ContentView: View {
                         .scaleEffect(scaleEffect)
                         .animation(.easeInOut(duration: 0.5), value: timerManager.progress)
                         .animation(.easeInOut(duration: 0.3), value: scaleEffect)
-                    
+
                     // Time display
                     VStack(spacing: 8) {
                         Text(timerManager.formattedTime)
@@ -495,7 +495,7 @@ struct ContentView: View {
                             .foregroundColor(.primary)
                             .opacity(backgroundOpacity)
                             .animation(.easeInOut(duration: 0.3), value: backgroundOpacity)
-                        
+
                         Text(timerManager.isFocusMode ? "Focus" : "Break")
                             .font(.callout)
                             .foregroundColor(.secondary)
@@ -523,7 +523,7 @@ struct ContentView: View {
                 .accessibilityValue("\(timerManager.formattedTime) remaining")
                 .accessibilityHint(timerManager.isRunning ? "" : "Double tap to start the session")
                 .accessibilityAddTraits(.isButton)
-                
+
                 // Modern control buttons
                 HStack(spacing: 30) {
                     // Reset button
@@ -538,7 +538,7 @@ struct ContentView: View {
                         color: .gray,
                         accessibilityLabel: "Reset timer"
                     )
-                    
+
                     // Skip/Mode Switch button
                     ControlButton(
                         icon: "forward.fill",
@@ -578,12 +578,12 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
                 .opacity(backgroundOpacity)
                 .animation(.easeInOut(duration: 0.3), value: backgroundOpacity)
-                
+
                 Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.vertical, 20)
-            
+
             // Bottom status area
             VStack {
                 if timerManager.isLocked {
@@ -591,7 +591,7 @@ struct ContentView: View {
                         Image(systemName: "lock.fill")
                             .foregroundColor(.red)
                             .font(.caption)
-                        
+
                         Text("Stay focused - don't leave this screen!")
                             .font(.caption)
                             .foregroundColor(.red)
@@ -614,9 +614,9 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     // MARK: - Full Screen Timer View
-    
+
     private func fullScreenTimerView(geometry: GeometryProxy) -> some View {
         ZStack {
             VStack(spacing: 0) {
@@ -635,7 +635,7 @@ struct ContentView: View {
                     Spacer()
                 }
                 .frame(height: geometry.size.height * 0.25)
-                
+
                 // Center section with timer and emoji
                 VStack(spacing: 20) {
                     // Timer display above emoji
@@ -647,7 +647,7 @@ struct ContentView: View {
                         .animation(.easeInOut(duration: 1.0).delay(0.8), value: timerManager.isRunning)
                         .accessibilityLabel(timerManager.isFocusMode ? "Focus time remaining" : "Break time remaining")
                         .accessibilityValue(timerManager.formattedTime)
-                    
+
                     // Emoji with timer ring border
                     ZStack {
                         // Timer progress ring around the emoji
@@ -656,7 +656,7 @@ struct ContentView: View {
                             .frame(width: min(geometry.size.width * 0.7, geometry.size.height * 0.35))
                             .opacity(timerManager.isRunning ? 1 : 0)
                             .animation(.easeInOut(duration: 1.0).delay(1.0), value: timerManager.isRunning)
-                        
+
                         Circle()
                             .trim(from: 0, to: timerManager.progress)
                             .stroke(
@@ -668,7 +668,7 @@ struct ContentView: View {
                             .animation(.easeInOut(duration: 0.5), value: timerManager.progress)
                             .opacity(timerManager.isRunning ? 1 : 0)
                             .animation(.easeInOut(duration: 1.0).delay(1.0), value: timerManager.isRunning)
-                        
+
                         // Centered emoji with hover effect
                         Text(timerManager.currentEmoji)
                             .font(.system(size: 80))
@@ -687,7 +687,7 @@ struct ContentView: View {
                                 emojiHovered = isPressing
                             } perform: {}
                     }
-                    
+
                     // Helper text under emoji when running
                     if timerManager.isRunning {
                         Text("Tap emoji to pause and exit \(timerManager.isFocusMode ? "focus" : "break") mode")
@@ -701,7 +701,7 @@ struct ContentView: View {
                 }
                 .frame(height: geometry.size.height * 0.5)
                 .frame(maxWidth: .infinity)
-                
+
                 // Bottom section with mode indicator
                 VStack {
                     Text(timerManager.isFocusMode ? "Focus Mode" : "Break Mode")
@@ -712,17 +712,17 @@ struct ContentView: View {
                         .opacity(timerManager.isRunning ? 1 : 0)
                         .animation(.easeInOut(duration: 1.0).delay(1.2), value: timerManager.isRunning)
                         .padding(.top, 20)
-                    
+
                     Spacer()
                 }
                 .frame(height: geometry.size.height * 0.25)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
+
             // Floating control buttons
             VStack {
                 Spacer()
-                
+
                 HStack(spacing: 60) {
                     // Restart button
                     FloatingButton(
@@ -734,7 +734,7 @@ struct ContentView: View {
                             }
                         }
                     )
-                    
+
                     // Skip button
                     FloatingButton(
                         icon: "forward.fill",
@@ -766,18 +766,18 @@ struct QuickStatCard: View {
     let value: String
     let label: String
     let color: Color
-    
+
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundColor(color)
-            
+
             Text(value)
                 .font(.headline)
                 .fontWeight(.bold)
                 .foregroundColor(.primary)
-            
+
             Text(label)
                 .font(.caption2)
                 .foregroundColor(.secondary)
@@ -822,14 +822,14 @@ struct FloatingButton: View {
     let icon: String
     let label: String
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.title3)
                     .foregroundColor(.white)
-                
+
                 Text(label)
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.9))
@@ -851,7 +851,7 @@ struct FloatingButton: View {
 struct WelcomeView: View {
     @Binding var showingWelcome: Bool
     @State private var currentStep = 0
-    
+
     private let welcomeSteps = [
         WelcomeStep(
             emoji: "🍅",
@@ -874,11 +874,11 @@ struct WelcomeView: View {
             description: "Tap the tomato to start your first Pomodoro session. Your productive journey begins now!"
         )
     ]
-    
+
     var body: some View {
         VStack(spacing: 40) {
             Spacer()
-            
+
             // Progress dots
             HStack(spacing: 8) {
                 ForEach(0..<welcomeSteps.count, id: \.self) { index in
@@ -889,22 +889,22 @@ struct WelcomeView: View {
                 }
             }
             .padding(.top, 20)
-            
+
             Spacer()
-            
+
             // Welcome content
             VStack(spacing: 30) {
                 Text(welcomeSteps[currentStep].emoji)
                     .font(.system(size: 80))
                     .scaleEffect(1.0)
                     .animation(.spring(response: 0.6, dampingFraction: 0.8), value: currentStep)
-                
+
                 VStack(spacing: 16) {
                     Text(welcomeSteps[currentStep].title)
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundColor(.primary)
                         .multilineTextAlignment(.center)
-                    
+
                     Text(welcomeSteps[currentStep].description)
                         .font(.body)
                         .foregroundColor(.secondary)
@@ -914,9 +914,9 @@ struct WelcomeView: View {
                 }
                 .padding(.horizontal, 30)
             }
-            
+
             Spacer()
-            
+
             // Navigation buttons
             HStack(spacing: 20) {
                 if currentStep > 0 {
@@ -927,9 +927,9 @@ struct WelcomeView: View {
                     }
                     .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Button(currentStep == welcomeSteps.count - 1 ? "Get Started!" : "Next") {
                     if currentStep == welcomeSteps.count - 1 {
                         withAnimation(.easeInOut(duration: 0.5)) {
@@ -951,7 +951,7 @@ struct WelcomeView: View {
                 )
             }
             .padding(.horizontal, 30)
-            
+
             Spacer().frame(height: 50)
         }
     }
@@ -965,32 +965,32 @@ struct WelcomeStep {
 
 struct AppLockOverlay: View {
     @ObservedObject var appLockManager: AppLockManager
-    
+
     var body: some View {
         ZStack {
             // Semi-transparent overlay
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .ignoresSafeArea()
-            
+
             VStack(spacing: 30) {
                 Image(systemName: "lock.shield.fill")
                     .font(.system(size: 50))
                     .foregroundColor(.orange)
-                
+
                 VStack(spacing: 16) {
                     Text("Focus Session Active")
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(.primary)
-                    
+
                     Text("You left during a focus session. Return to your timer to stay on track!")
                         .font(.body)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
                 }
-                
+
                 Button("Return to Focus") {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         appLockManager.showingUnlockAlert = false
