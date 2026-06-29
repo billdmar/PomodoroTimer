@@ -41,6 +41,7 @@ class TimerManager: ObservableObject {
 
     private let userDefaults = UserDefaults.standard
     private let settingsStore = SettingsStore()
+    private let sessionStore = SessionStore()
     private var timer: Timer?
     private var cancellables = Set<AnyCancellable>()
 
@@ -107,6 +108,7 @@ class TimerManager: ObservableObject {
         generateRandomMotivationalQuote()
         requestNotificationPermission()
         loadLocalStats()
+        recoverSession()
         setupFirebase()
     }
 
@@ -116,6 +118,37 @@ class TimerManager: ObservableObject {
         breakDuration = values.breakDuration
         focusEmoji = values.focusEmoji
         breakEmoji = values.breakEmoji
+    }
+
+    /// Restores an interrupted session (the app was quit/crashed mid-timer).
+    /// A running session resumes — paused — at the time that's actually left
+    /// after accounting for real elapsed time; an already-expired session is
+    /// simply cleared so the user starts fresh.
+    private func recoverSession() {
+        switch SessionRecovery.recover(from: sessionStore.load(), now: Date()) {
+        case .none:
+            break
+        case let .resume(remaining, focusMode):
+            isFocusMode = focusMode
+            timeRemaining = remaining
+            // Restored as paused: the user explicitly resumes.
+            isRunning = false
+            isLocked = false
+        case let .expired(focusMode):
+            isFocusMode = focusMode
+            timeRemaining = focusMode ? focusDuration : breakDuration
+        }
+        sessionStore.clear()
+    }
+
+    /// Snapshots the current session so it can be recovered after a quit/crash.
+    private func saveSession() {
+        sessionStore.save(SessionSnapshot(
+            savedAt: Date(),
+            timeRemaining: timeRemaining,
+            isFocusMode: isFocusMode,
+            wasRunning: isRunning
+        ))
     }
 
     var currentEmoji: String {
@@ -155,6 +188,8 @@ class TimerManager: ObservableObject {
             appLockManager.lockApp()
         }
 
+        saveSession()
+
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -175,6 +210,9 @@ class TimerManager: ObservableObject {
 
         // Unlock app when pausing
         appLockManager.unlockApp()
+
+        // Persist the paused state so it survives a quit.
+        saveSession()
     }
 
     func restartCurrentTimer() {
@@ -191,6 +229,8 @@ class TimerManager: ObservableObject {
     func resetTimer() {
         pauseTimer()
         timeRemaining = isFocusMode ? focusDuration : breakDuration
+        // Back to a fresh idle state — nothing to recover.
+        sessionStore.clear()
     }
 
     func skipTimer() {
@@ -241,6 +281,10 @@ class TimerManager: ObservableObject {
             isFocusMode = true
             timeRemaining = focusDuration
         }
+
+        // The completed session shouldn't be recovered on next launch; the
+        // pauseTimer() above persisted a snapshot, so clear it here.
+        sessionStore.clear()
     }
 
     private func loadLocalStats() {
