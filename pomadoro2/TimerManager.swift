@@ -12,9 +12,10 @@ import AudioToolbox
 import Combine
 import WidgetKit
 
+@MainActor
 class TimerManager: ObservableObject {
     @Published var isRunning = false
-    @Published var timeRemaining: TimeInterval = 25 * 60 // 25 minutes in seconds
+    @Published var timeRemaining: TimeInterval = TimerConstants.defaultFocusDuration
     @Published var isFocusMode = true
     @Published var isLocked = false
     @Published var currentEncouragingMessage = ""
@@ -23,8 +24,8 @@ class TimerManager: ObservableObject {
     @Published var currentMotivationalQuote = ""
 
     // Settings
-    @Published var focusDuration: TimeInterval = 25 * 60
-    @Published var breakDuration: TimeInterval = 5 * 60
+    @Published var focusDuration: TimeInterval = TimerConstants.defaultFocusDuration
+    @Published var breakDuration: TimeInterval = TimerConstants.defaultBreakDuration
     @Published var focusEmoji = "🍅"
     @Published var breakEmoji = "😌"
 
@@ -37,8 +38,10 @@ class TimerManager: ObservableObject {
     // Firebase integration
     private let firebaseManager = FirebaseManager()
 
-    // App lock manager - Initialize it properly
-    @Published var appLockManager = AppLockManager()
+    /// Focus-mode lock + Screen Time shielding. A dependency, not observable
+    /// state owned by the timer — exposed read-only for views that present its
+    /// alerts.
+    let appLockManager = AppLockManager()
 
     private let settingsStore = SettingsStore()
     private let sessionStore = SessionStore()
@@ -48,73 +51,19 @@ class TimerManager: ObservableObject {
     private let liveActivity = LiveActivityController()
     private var cancellables = Set<AnyCancellable>()
 
-    // Deadline-based timing: while running, `endDate` is the source of truth and
-    // `timeRemaining` is derived from the wall clock. This makes the countdown
-    // immune to background suspension and main-thread drift — the old approach
-    // decremented `timeRemaining` on a 1 Hz Timer that froze when the app was
-    // backgrounded. The `tickTask` only refreshes the UI; it is not the clock.
-    private var endDate: Date?
+    // Explicit state machine (see TimerState). The wall clock remains the
+    // source of truth — a running state carries its `endDate` and the visible
+    // `timeRemaining`/`isRunning` are derived from `state`, so the countdown is
+    // immune to background suspension and tick drift. `tickTask` only refreshes
+    // the UI; it is not the clock.
+    private var state: TimerState = .idle(remaining: TimerConstants.defaultFocusDuration) {
+        didSet { isRunning = state.isRunning }
+    }
     private var tickTask: Task<Void, Never>?
-    private static let completionNotificationID = "timer.completion"
-
-    private let encouragingMessages = [
-        "🔥 You're crushing it! Stay focused!",
-        "🌟 Every minute counts towards your goals!",
-        "💪 Your future self will thank you!",
-        "🎯 Focus is your superpower!",
-        "✨ Great things happen when you concentrate!",
-        "🚀 You're building momentum!",
-        "🧠 Your brain is getting stronger!",
-        "⭐ Excellence is built one session at a time!",
-        "🏆 Champions are made in moments like these!",
-        "💎 Polish your skills with deep focus!",
-        "🌱 You're growing with every focused minute!",
-        "🔮 The magic happens in the focused zone!",
-        "⚡ Channel your energy into this moment!",
-        "🎨 Create something amazing right now!",
-        "🌈 Your concentration is painting success!",
-        "🏃‍♂️ Keep the momentum going strong!",
-        "🎪 This is your time to shine!",
-        "🔥 Turn up the focus and burn bright!",
-        "🌟 You're exactly where you need to be!",
-        "💫 Transform this time into progress!"
-    ]
-
-    private let motivationalQuotes = [
-        "Success is the sum of small efforts repeated day in and day out.",
-        "The expert in anything was once a beginner who refused to give up.",
-        "You don't have to be great to get started, but you have to get started to be great.",
-        "Every master was once a disaster who refused to quit.",
-        "Progress, not perfection, is the goal.",
-        "The only impossible journey is the one you never begin.",
-        "Small steps daily lead to big results yearly.",
-        "Your focus determines your reality.",
-        "Discipline is choosing between what you want now and what you want most.",
-        "The pain of discipline weighs ounces, but the pain of regret weighs tons.",
-        "Success isn't just about what you accomplish, but what you inspire others to do.",
-        "Don't watch the clock; do what it does. Keep going.",
-        "The future depends on what you do today.",
-        "You are capable of more than you know.",
-        "Great things never come from comfort zones.",
-        "The difference between ordinary and extraordinary is that little 'extra'.",
-        "Champions train, losers complain.",
-        "Your potential is endless.",
-        "Excellence is not a skill, it's an attitude.",
-        "The best time to plant a tree was 20 years ago. The second best time is now.",
-        "Believe you can and you're halfway there.",
-        "Success is not final, failure is not fatal: it is the courage to continue that counts.",
-        "What lies behind us and what lies before us are tiny matters compared to what lies within us.",
-        "The only way to do great work is to love what you do.",
-        "Innovation distinguishes between a leader and a follower.",
-        "Stay hungry, stay foolish.",
-        "The journey of a thousand miles begins with one step.",
-        "It always seems impossible until it's done.",
-        "Strive not to be a success, but rather to be of value.",
-        "The only person you are destined to become is the person you decide to be."
-    ]
 
     init() {
         loadSettings()
+        state = .idle(remaining: focusDuration)
         timeRemaining = focusDuration
         selectRandomMessage()
         generateRandomMotivationalQuote()
@@ -142,13 +91,15 @@ class TimerManager: ObservableObject {
             break
         case let .resume(remaining, focusMode):
             isFocusMode = focusMode
-            timeRemaining = remaining
             // Restored as paused: the user explicitly resumes.
-            isRunning = false
+            state = .paused(remaining: remaining)
+            timeRemaining = remaining
             isLocked = false
         case let .expired(focusMode):
             isFocusMode = focusMode
-            timeRemaining = focusMode ? focusDuration : breakDuration
+            let remaining = focusMode ? focusDuration : breakDuration
+            state = .idle(remaining: remaining)
+            timeRemaining = remaining
         }
         sessionStore.clear()
     }
@@ -170,7 +121,7 @@ class TimerManager: ObservableObject {
             isRunning: isRunning,
             isFocusMode: isFocusMode,
             emoji: currentEmoji,
-            endDate: endDate,
+            endDate: state.endDate,
             timeRemaining: timeRemaining
         ))
         WidgetCenter.shared.reloadAllTimelines()
@@ -203,9 +154,9 @@ class TimerManager: ObservableObject {
     func startTimer() {
         // Anchor the deadline to the wall clock so the countdown stays correct
         // even if the app is backgrounded or the tick is delayed.
-        endDate = Date().addingTimeInterval(timeRemaining)
+        let endDate = Date().addingTimeInterval(timeRemaining)
+        state = .running(endDate: endDate)
 
-        isRunning = true
         isLocked = true
         selectRandomMessage()
 
@@ -219,27 +170,25 @@ class TimerManager: ObservableObject {
             appLockManager.lockApp()
         }
 
-        scheduleCompletionNotification()
+        scheduleCompletionNotification(endDate: endDate)
         saveSession()
         publishSharedState()
-        if let endDate {
-            liveActivity.start(endDate: endDate, isFocusMode: isFocusMode, emoji: currentEmoji)
-        }
+        liveActivity.start(endDate: endDate, isFocusMode: isFocusMode, emoji: currentEmoji)
         startTick()
         Haptics.medium()
     }
 
     func pauseTimer() {
-        // Freeze the derived remaining time before discarding the deadline.
-        // Computed inline (not via recompute()) so pausing never triggers
-        // completion — completion flows only through the tick/recompute path,
-        // which avoids a pause↔complete recursion.
-        if isRunning, let endDate {
-            timeRemaining = TimerMath.remaining(until: endDate, now: Date())
+        // Freeze the derived remaining time before leaving the running state.
+        // Computed directly from `state` (not via recompute()) so pausing never
+        // triggers completion — completion flows only through the tick/recompute
+        // path, which avoids a pause↔complete recursion.
+        if state.isRunning {
+            let remaining = state.remaining(now: Date())
+            timeRemaining = remaining
+            state = .paused(remaining: remaining)
         }
-        isRunning = false
         isLocked = false
-        endDate = nil
         stopTick()
         cancelCompletionNotification()
 
@@ -260,9 +209,9 @@ class TimerManager: ObservableObject {
         stopTick()
         tickTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                guard let self, self.isRunning else { return }
+                guard let self, self.state.isRunning else { return }
                 self.recompute()
-                try? await Task.sleep(nanoseconds: 250_000_000) // 0.25s
+                try? await Task.sleep(nanoseconds: UInt64(TimerConstants.tickInterval * 1_000_000_000))
             }
         }
     }
@@ -276,18 +225,17 @@ class TimerManager: ObservableObject {
     /// once the deadline has passed. Safe to call on foreground/recovery — it
     /// shares the single completion path with the normal tick.
     func recompute() {
-        guard isRunning, let endDate else { return }
+        guard state.isRunning else { return }
         let now = Date()
-        if TimerMath.hasCompleted(endDate: endDate, now: now) {
+        if state.hasCompleted(now: now) {
             timeRemaining = 0
             timerCompleted()
         } else {
-            timeRemaining = TimerMath.remaining(until: endDate, now: now)
+            timeRemaining = state.remaining(now: now)
         }
     }
 
-    private func scheduleCompletionNotification() {
-        guard let endDate else { return }
+    private func scheduleCompletionNotification(endDate: Date) {
         let interval = endDate.timeIntervalSinceNow
         guard interval > 0 else { return }
 
@@ -300,7 +248,7 @@ class TimerManager: ObservableObject {
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
         let request = UNNotificationRequest(
-            identifier: Self.completionNotificationID,
+            identifier: TimerConstants.completionNotificationID,
             content: content,
             trigger: trigger
         )
@@ -313,7 +261,7 @@ class TimerManager: ObservableObject {
 
     private func cancelCompletionNotification() {
         UNUserNotificationCenter.current().removePendingNotificationRequests(
-            withIdentifiers: [Self.completionNotificationID]
+            withIdentifiers: [TimerConstants.completionNotificationID]
         )
     }
 
@@ -344,7 +292,9 @@ class TimerManager: ObservableObject {
 
     func resetTimer() {
         pauseTimer()
-        timeRemaining = isFocusMode ? focusDuration : breakDuration
+        let remaining = isFocusMode ? focusDuration : breakDuration
+        state = .idle(remaining: remaining)
+        timeRemaining = remaining
         // Back to a fresh idle state — nothing to recover.
         sessionStore.clear()
         publishSharedState()
@@ -365,7 +315,9 @@ class TimerManager: ObservableObject {
     func switchMode() {
         pauseTimer()
         isFocusMode.toggle()
-        timeRemaining = isFocusMode ? focusDuration : breakDuration
+        let remaining = isFocusMode ? focusDuration : breakDuration
+        state = .idle(remaining: remaining)
+        timeRemaining = remaining
     }
 
     private func timerCompleted() {
@@ -380,7 +332,7 @@ class TimerManager: ObservableObject {
         // In-app feedback. The scheduled completion notification (set at start)
         // covers the case where the app is backgrounded/suspended at the
         // deadline; pauseTimer() above cancels it so we never double-notify.
-        AudioServicesPlaySystemSound(1005)
+        AudioServicesPlaySystemSound(TimerConstants.completionSoundID)
         Haptics.success()
 
         // Unlock app when session completes
@@ -395,13 +347,10 @@ class TimerManager: ObservableObject {
             firebaseManager.logFocusSession(duration: focusMinutes)
         }
 
-        if isFocusMode {
-            isFocusMode = false
-            timeRemaining = breakDuration
-        } else {
-            isFocusMode = true
-            timeRemaining = focusDuration
-        }
+        isFocusMode.toggle()
+        let remaining = isFocusMode ? focusDuration : breakDuration
+        state = .idle(remaining: remaining)
+        timeRemaining = remaining
 
         // The completed session shouldn't be recovered on next launch; the
         // pauseTimer() above persisted a snapshot, so clear it here.
@@ -485,11 +434,11 @@ class TimerManager: ObservableObject {
     }
 
     private func selectRandomMessage() {
-        currentEncouragingMessage = encouragingMessages.randomElement() ?? "🍅 Stay focused and keep going!"
+        currentEncouragingMessage = MotivationalContent.randomEncouragement()
     }
 
     func generateRandomMotivationalQuote() {
-        currentMotivationalQuote = motivationalQuotes.randomElement() ?? "You've got this!"
+        currentMotivationalQuote = MotivationalContent.randomQuote()
     }
 
     func updateSettings(focusMinutes: Double, breakMinutes: Double, focusEmoji: String, breakEmoji: String) {
@@ -507,7 +456,9 @@ class TimerManager: ObservableObject {
         ))
 
         if !isRunning {
-            timeRemaining = isFocusMode ? focusDuration : breakDuration
+            let remaining = isFocusMode ? focusDuration : breakDuration
+            state = .idle(remaining: remaining)
+            timeRemaining = remaining
         }
     }
 
