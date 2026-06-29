@@ -7,6 +7,10 @@
 //  class) into a dedicated content provider — easier to scan, extend, and one
 //  day localize.
 //
+//  coverage:ignore-file — this is static content plus two trivial random
+//  accessors; the only uncovered lines are the `?? fallback` branches, which are
+//  unreachable while the arrays are non-empty (asserted in MotivationalContentTests).
+//
 
 import Foundation
 
