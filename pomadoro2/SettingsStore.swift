@@ -22,13 +22,15 @@ struct SettingsStore {
         var breakDuration: TimeInterval
         var focusEmoji: String
         var breakEmoji: String
+        var longBreakDuration: TimeInterval
 
-        /// First-launch defaults (25 min focus / 5 min break).
+        /// First-launch defaults (25 min focus / 5 min break / 15 min long break).
         static let defaults = Values(
             focusDuration: 25 * 60,
             breakDuration: 5 * 60,
             focusEmoji: "🍅",
-            breakEmoji: "😌"
+            breakEmoji: "😌",
+            longBreakDuration: 15 * 60
         )
     }
 
@@ -37,6 +39,7 @@ struct SettingsStore {
         static let breakDuration = "settings.breakDuration"
         static let focusEmoji = "settings.focusEmoji"
         static let breakEmoji = "settings.breakEmoji"
+        static let longBreakDuration = "settings.longBreakDuration"
     }
 
     private let defaults: UserDefaults
@@ -63,6 +66,9 @@ struct SettingsStore {
         if let emoji = defaults.string(forKey: Key.breakEmoji) {
             values.breakEmoji = emoji
         }
+        if defaults.object(forKey: Key.longBreakDuration) != nil {
+            values.longBreakDuration = defaults.double(forKey: Key.longBreakDuration)
+        }
 
         return values
     }
@@ -73,5 +79,6 @@ struct SettingsStore {
         defaults.set(values.breakDuration, forKey: Key.breakDuration)
         defaults.set(values.focusEmoji, forKey: Key.focusEmoji)
         defaults.set(values.breakEmoji, forKey: Key.breakEmoji)
+        defaults.set(values.longBreakDuration, forKey: Key.longBreakDuration)
     }
 }

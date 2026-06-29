@@ -19,7 +19,7 @@ MIN="${2:-80}"
 SRC_DIR="${SRC_DIR:-pomadoro2}"
 
 # A file is logic (and thus gated) when its name ends in one of these.
-LOGIC_SUFFIXES='(Math|Calculator|Store|State|Content|Evaluator|Recovery)\.swift$'
+LOGIC_SUFFIXES='(Math|Calculator|Store|State|Content|Evaluator|Recovery|Policy|Achievements)\.swift$'
 
 # Discover the gated files from the source tree.
 gated=()

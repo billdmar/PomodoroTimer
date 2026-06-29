@@ -34,6 +34,16 @@ class TimerManager: ObservableObject {
     @Published var totalFocusMinutes: Int = 0
     @Published var currentStreak: Int = 0
     @Published var lastCompletionDate: Date?
+    @Published var todaySessions: Int = 0
+    @Published var totalSessions: Int = 0
+
+    /// True while the current/just-started break is a long break (set when a
+    /// focus session that hits the long-break cadence completes).
+    @Published var isLongBreak = false
+
+    /// Long break length (used every Nth break). Persisted with the other
+    /// settings.
+    @Published var longBreakDuration: TimeInterval = TimerConstants.defaultLongBreakDuration
 
     // Firebase integration
     private let firebaseManager = FirebaseManager()
@@ -79,6 +89,7 @@ class TimerManager: ObservableObject {
         breakDuration = values.breakDuration
         focusEmoji = values.focusEmoji
         breakEmoji = values.breakEmoji
+        longBreakDuration = values.longBreakDuration
     }
 
     /// Restores an interrupted session (the app was quit/crashed mid-timer).
@@ -324,10 +335,6 @@ class TimerManager: ObservableObject {
         pauseTimer()
 
         let completedMode = isFocusMode ? "Focus" : "Break"
-        let nextMode = isFocusMode ? "Break" : "Focus"
-
-        completionMessage = "\(completedMode) session complete! Time for a \(nextMode.lowercased()) 🎉"
-        showingCompletionAlert = true
 
         // In-app feedback. The scheduled completion notification (set at start)
         // covers the case where the app is backgrounded/suspended at the
@@ -338,17 +345,33 @@ class TimerManager: ObservableObject {
         // Unlock app when session completes
         appLockManager.unlockApp()
 
-        // Update stats if it was a focus session
+        // Update stats if it was a focus session. Decide the upcoming break
+        // kind from how many focus sessions have been completed today (long
+        // break every Nth — the classic Pomodoro cadence).
+        var nextBreakIsLong = false
         if isFocusMode {
             let focusMinutes = Int(focusDuration / 60)
             updateStats(focusMinutesCompleted: focusMinutes)
+            nextBreakIsLong = BreakPolicy.breakKind(completedTodaySessions: todaySessions) == .long
+            isLongBreak = nextBreakIsLong
 
             // Log session to Firebase
             Task { await firebaseManager.logFocusSession(duration: focusMinutes) }
         }
 
+        // Announce what's next (a long break is the reward for completing the
+        // Nth focus session).
+        let nextLabel = isFocusMode ? (nextBreakIsLong ? "long break" : "break") : "focus session"
+        completionMessage = "\(completedMode) session complete! Time for a \(nextLabel) 🎉"
+        showingCompletionAlert = true
+
         isFocusMode.toggle()
-        let remaining = isFocusMode ? focusDuration : breakDuration
+        let remaining: TimeInterval
+        if isFocusMode {
+            remaining = focusDuration
+        } else {
+            remaining = nextBreakIsLong ? longBreakDuration : breakDuration
+        }
         state = .idle(remaining: remaining)
         timeRemaining = remaining
 
@@ -360,6 +383,11 @@ class TimerManager: ObservableObject {
 
     // MARK: - Stats
 
+    /// Read-only snapshot of the current stats for views (e.g. achievement
+    /// evaluation) that want the value model rather than the individual
+    /// @Published fields.
+    var statsSnapshot: StatsState { statsState }
+
     /// Bridges the view-facing @Published stats to the value model that the
     /// pure StatsCalculator / StatsPersistence operate on.
     private var statsState: StatsState {
@@ -368,7 +396,9 @@ class TimerManager: ObservableObject {
                 todayFocusMinutes: todayFocusMinutes,
                 totalFocusMinutes: totalFocusMinutes,
                 currentStreak: currentStreak,
-                lastCompletionDate: lastCompletionDate
+                lastCompletionDate: lastCompletionDate,
+                todaySessions: todaySessions,
+                totalSessions: totalSessions
             )
         }
         set {
@@ -376,6 +406,8 @@ class TimerManager: ObservableObject {
             totalFocusMinutes = newValue.totalFocusMinutes
             currentStreak = newValue.currentStreak
             lastCompletionDate = newValue.lastCompletionDate
+            todaySessions = newValue.todaySessions
+            totalSessions = newValue.totalSessions
         }
     }
 
@@ -436,9 +468,16 @@ class TimerManager: ObservableObject {
         currentMotivationalQuote = MotivationalContent.randomQuote()
     }
 
-    func updateSettings(focusMinutes: Double, breakMinutes: Double, focusEmoji: String, breakEmoji: String) {
+    func updateSettings(
+        focusMinutes: Double,
+        breakMinutes: Double,
+        focusEmoji: String,
+        breakEmoji: String,
+        longBreakMinutes: Double? = nil
+    ) {
         focusDuration = focusMinutes * 60
         breakDuration = breakMinutes * 60
+        if let longBreakMinutes { longBreakDuration = longBreakMinutes * 60 }
         self.focusEmoji = TimerMath.normalizedEmoji(focusEmoji, default: "🍅")
         self.breakEmoji = TimerMath.normalizedEmoji(breakEmoji, default: "😌")
 
@@ -447,7 +486,8 @@ class TimerManager: ObservableObject {
             focusDuration: focusDuration,
             breakDuration: breakDuration,
             focusEmoji: self.focusEmoji,
-            breakEmoji: self.breakEmoji
+            breakEmoji: self.breakEmoji,
+            longBreakDuration: longBreakDuration
         ))
 
         if !isRunning {

@@ -139,47 +139,17 @@ struct StatsView: View {
                             GridItem(.flexible()),
                             GridItem(.flexible())
                         ], spacing: 10) {
-                            AchievementBadge(
-                                icon: "🎯",
-                                title: "First Session",
-                                subtitle: "Complete 1 session",
-                                isUnlocked: timerManager.totalFocusMinutes > 0
-                            )
-
-                            AchievementBadge(
-                                icon: "⚡",
-                                title: "Speed Learner",
-                                subtitle: "5 sessions/day",
-                                isUnlocked: timerManager.todayFocusMinutes >= 125
-                            )
-
-                            AchievementBadge(
-                                icon: "🔥",
-                                title: "On Fire",
-                                subtitle: "7 day streak",
-                                isUnlocked: timerManager.currentStreak >= 7
-                            )
-
-                            AchievementBadge(
-                                icon: "💎",
-                                title: "Diamond Focus",
-                                subtitle: "30 day streak",
-                                isUnlocked: timerManager.currentStreak >= 30
-                            )
-
-                            AchievementBadge(
-                                icon: "🏆",
-                                title: "Century Club",
-                                subtitle: "100 sessions",
-                                isUnlocked: timerManager.totalFocusMinutes >= 2500
-                            )
-
-                            AchievementBadge(
-                                icon: "🎖️",
-                                title: "Master",
-                                subtitle: "1000 minutes",
-                                isUnlocked: timerManager.totalFocusMinutes >= 1000
-                            )
+                            // Catalog + unlock conditions live in
+                            // AchievementEvaluator (pure + unit-tested) rather
+                            // than as inline magic comparisons here.
+                            ForEach(AchievementEvaluator.evaluate(timerManager.statsSnapshot), id: \.achievement.id) { item in
+                                AchievementBadge(
+                                    icon: item.achievement.icon,
+                                    title: item.achievement.title,
+                                    subtitle: item.achievement.subtitle,
+                                    isUnlocked: item.unlocked
+                                )
+                            }
                         }
                     }
                     .padding(.horizontal, DesignTokens.Spacing.md)
