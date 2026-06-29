@@ -16,6 +16,7 @@ MIN="${2:-80}"
 GATED_FILES=(
   "TimerMath.swift"
   "StreakCalculator.swift"
+  "SettingsStore.swift"
 )
 
 report="$(xcrun xccov view --report --json "$XCRESULT")"
