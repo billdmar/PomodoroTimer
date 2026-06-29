@@ -41,6 +41,21 @@ struct SharedSessionStoreTests {
     @Test func idleConstantIsStopped() {
         #expect(!SharedSessionState.idle.isRunning)
         #expect(SharedSessionState.idle.endDate == nil)
+        #expect(SharedSessionState.idle.timeRemaining == 25 * 60)
+        #expect(SharedSessionState.idle.emoji == "🍅")
+    }
+
+    @Test func sharedConfigExposesTheAppGroupAndAUsableStore() {
+        // Exercises SharedConfig (App Group id + the defaults accessor), which
+        // backs the widget's reads in production.
+        #expect(SharedConfig.appGroupID == "group.com.billdmar.pomadoro2")
+        // The accessor returns a usable UserDefaults (App Group or .standard
+        // fallback) — round-trip a throwaway key to prove it works.
+        let defaults = SharedConfig.defaults
+        let probeKey = "sharedConfig.probe.\(UUID().uuidString)"
+        defaults.set(7, forKey: probeKey)
+        #expect(defaults.integer(forKey: probeKey) == 7)
+        defaults.removeObject(forKey: probeKey)
     }
 }
 
