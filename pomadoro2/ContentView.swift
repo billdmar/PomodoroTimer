@@ -270,8 +270,11 @@ struct ContentView: View {
         ZStack {
             if timerManager.isRunning {
                 // Dynamic background for running state
-                dynamicColorBackground
-                    .transition(.opacity)
+                DynamicBackgroundView(
+                    isFocusMode: timerManager.isFocusMode,
+                    colorShift: colorShift
+                )
+                .transition(.opacity)
             } else {
                 // Clean background for stopped state
                 LinearGradient(
@@ -287,53 +290,6 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.8), value: timerManager.isRunning)
-    }
-
-    private var dynamicColorBackground: some View {
-        let colors = DesignTokens.gradientColors(isFocusMode: timerManager.isFocusMode)
-        return ZStack {
-            // Base gradient for the current mode.
-            LinearGradient(
-                gradient: Gradient(colors: colors),
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .ignoresSafeArea()
-
-            // Shifting overlay that moves the gradient around
-            LinearGradient(
-                gradient: Gradient(colors: colors.map { $0.opacity(0.8) }),
-                startPoint: UnitPoint(
-                    x: 0.0 + sin(Double(colorShift) * 0.01) * 0.5,
-                    y: 0.0 + cos(Double(colorShift) * 0.008) * 0.3
-                ),
-                endPoint: UnitPoint(
-                    x: 1.0 + cos(Double(colorShift) * 0.012) * 0.5,
-                    y: 1.0 + sin(Double(colorShift) * 0.009) * 0.3
-                )
-            )
-            .ignoresSafeArea()
-            .blendMode(.overlay)
-
-            // Second shifting layer for more movement
-            RadialGradient(
-                gradient: Gradient(colors: [
-                    colors[0].opacity(0.3),
-                    Color.clear,
-                    colors[1].opacity(0.3)
-                ]),
-                center: UnitPoint(
-                    x: 0.5 + sin(Double(colorShift) * 0.006) * 0.4,
-                    y: 0.5 + cos(Double(colorShift) * 0.007) * 0.4
-                ),
-                startRadius: 100 + sin(Double(colorShift) * 0.015) * 50,
-                endRadius: 600 + cos(Double(colorShift) * 0.011) * 200
-            )
-            .ignoresSafeArea()
-            .blendMode(.multiply)
-        }
-        .animation(.easeInOut(duration: 1.0), value: timerManager.isRunning)
-        .animation(.easeInOut(duration: 0.8), value: timerManager.isFocusMode)
     }
 
     // MARK: - Main Timer View
@@ -426,73 +382,13 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
 
                 // Timer display with modern design
-                ZStack {
-                    // Outer glow effect
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    (timerManager.isFocusMode ? Color.red : Color.green).opacity(0.1),
-                                    Color.clear
-                                ],
-                                center: .center,
-                                startRadius: 100,
-                                endRadius: 140
-                            )
-                        )
-                        .frame(width: 280, height: 280)
-                        .scaleEffect(scaleEffect)
-                        .animation(.easeInOut(duration: 0.3), value: scaleEffect)
-
-                    // Background circle with subtle shadow
-                    Circle()
-                        .fill(Color(.systemBackground))
-                        .frame(width: 260, height: 260)
-                        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                        .scaleEffect(scaleEffect)
-                        .animation(.easeInOut(duration: 0.3), value: scaleEffect)
-
-                    // Progress circle
-                    Circle()
-                        .trim(from: 0, to: timerManager.progress)
-                        .stroke(
-                            LinearGradient(
-                                colors: timerManager.isFocusMode ?
-                                    [Color.red.opacity(0.7), Color.red, Color.orange.opacity(0.8)] :
-                                    [Color.green.opacity(0.7), Color.green, Color.mint.opacity(0.8)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            style: StrokeStyle(lineWidth: 12, lineCap: .round)
-                        )
-                        .frame(width: 260, height: 260)
-                        .rotationEffect(.degrees(-90))
-                        .scaleEffect(scaleEffect)
-                        .animation(.easeInOut(duration: 0.5), value: timerManager.progress)
-                        .animation(.easeInOut(duration: 0.3), value: scaleEffect)
-
-                    // Time display
-                    VStack(spacing: 8) {
-                        Text(timerManager.formattedTime)
-                            .font(DesignTokens.Typography.timerCompact)
-                            .foregroundColor(.primary)
-                            .opacity(backgroundOpacity)
-                            .animation(.easeInOut(duration: 0.3), value: backgroundOpacity)
-
-                        Text(timerManager.isFocusMode ? "Focus" : "Break")
-                            .font(.callout)
-                            .foregroundColor(.secondary)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule()
-                                    .fill(Color(.systemGray6))
-                            )
-                            .opacity(backgroundOpacity)
-                            .animation(.easeInOut(duration: 0.3), value: backgroundOpacity)
-                    }
-                }
+                ProgressRingView(
+                    isFocusMode: timerManager.isFocusMode,
+                    progress: timerManager.progress,
+                    formattedTime: timerManager.formattedTime,
+                    scaleEffect: scaleEffect,
+                    contentOpacity: backgroundOpacity
+                )
                 .frame(maxWidth: .infinity)
                 .onTapGesture {
                     if !timerManager.isRunning {
