@@ -287,40 +287,19 @@ struct ContentView: View {
     }
 
     private var dynamicColorBackground: some View {
-        ZStack {
-            if timerManager.isFocusMode {
-                // Focus mode gradient (coral to orange)
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color(red: 1.0, green: 0.373, blue: 0.427), // #FF5F6D
-                        Color(red: 1.0, green: 0.765, blue: 0.443)  // #FFC371
-                    ]),
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .ignoresSafeArea()
-            } else {
-                // Break mode gradient (blue)
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color(red: 0.2, green: 0.3, blue: 0.8),   // Deep blue
-                        Color(red: 0.0, green: 0.8, blue: 1.0)    // Cyan blue
-                    ]),
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .ignoresSafeArea()
-            }
+        let colors = DesignTokens.gradientColors(isFocusMode: timerManager.isFocusMode)
+        return ZStack {
+            // Base gradient for the current mode.
+            LinearGradient(
+                gradient: Gradient(colors: colors),
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .ignoresSafeArea()
 
             // Shifting overlay that moves the gradient around
             LinearGradient(
-                gradient: Gradient(colors: timerManager.isFocusMode ? [
-                    Color(red: 1.0, green: 0.373, blue: 0.427).opacity(0.8), // #FF5F6D
-                    Color(red: 1.0, green: 0.765, blue: 0.443).opacity(0.8)  // #FFC371
-                ] : [
-                    Color(red: 0.2, green: 0.3, blue: 0.8).opacity(0.8),
-                    Color(red: 0.0, green: 0.8, blue: 1.0).opacity(0.8)
-                ]),
+                gradient: Gradient(colors: colors.map { $0.opacity(0.8) }),
                 startPoint: UnitPoint(
                     x: 0.0 + sin(Double(colorShift) * 0.01) * 0.5,
                     y: 0.0 + cos(Double(colorShift) * 0.008) * 0.3
@@ -335,14 +314,10 @@ struct ContentView: View {
 
             // Second shifting layer for more movement
             RadialGradient(
-                gradient: Gradient(colors: timerManager.isFocusMode ? [
-                    Color(red: 1.0, green: 0.373, blue: 0.427).opacity(0.3), // #FF5F6D
+                gradient: Gradient(colors: [
+                    colors[0].opacity(0.3),
                     Color.clear,
-                    Color(red: 1.0, green: 0.765, blue: 0.443).opacity(0.3)  // #FFC371
-                ] : [
-                    Color(red: 0.2, green: 0.3, blue: 0.8).opacity(0.3),
-                    Color.clear,
-                    Color(red: 0.0, green: 0.8, blue: 1.0).opacity(0.3)
+                    colors[1].opacity(0.3)
                 ]),
                 center: UnitPoint(
                     x: 0.5 + sin(Double(colorShift) * 0.006) * 0.4,
@@ -763,272 +738,6 @@ struct ContentView: View {
         }
     }
 }
-
-// MARK: - Custom UI Components
-
-struct QuickStatCard: View {
-    let icon: String
-    let value: String
-    let label: String
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundColor(color)
-
-            Text(value)
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-
-            Text(label)
-                .font(.caption2)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
-        )
-    }
-}
-
-struct ControlButton: View {
-    let icon: String
-    let action: () -> Void
-    let disabled: Bool
-    let color: Color
-    var accessibilityLabel: String = ""
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(disabled ? .gray : .white)
-                .frame(width: 50, height: 50)
-                .background(
-                    Circle()
-                        .fill(disabled ? Color.gray.opacity(0.3) : color)
-                        .shadow(color: disabled ? .clear : color.opacity(0.3), radius: 8, x: 0, y: 4)
-                )
-        }
-        .disabled(disabled)
-        .scaleEffect(disabled ? 0.9 : 1.0)
-        .animation(.easeInOut(duration: 0.2), value: disabled)
-        .accessibilityLabel(accessibilityLabel)
-    }
-}
-
-struct FloatingButton: View {
-    let icon: String
-    let label: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundColor(.white)
-
-                Text(label)
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.9))
-            }
-            .frame(width: 80, height: 60)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
-
-struct WelcomeView: View {
-    @Binding var showingWelcome: Bool
-    @State private var currentStep = 0
-
-    private let welcomeSteps = [
-        WelcomeStep(
-            emoji: "🍅",
-            title: "Welcome to Pomodoro Timer",
-            description: "Boost your productivity with the time-tested Pomodoro Technique!"
-        ),
-        WelcomeStep(
-            emoji: "🕐",
-            title: "The Method",
-            description: "Work for 25 minutes, then take a 5-minute break. This simple rhythm helps maintain focus and prevents burnout."
-        ),
-        WelcomeStep(
-            emoji: "🧠",
-            title: "The Science",
-            description: "Created by Francesco Cirillo in the 1980s, this technique leverages your brain's natural attention cycles for maximum productivity."
-        ),
-        WelcomeStep(
-            emoji: "🚀",
-            title: "Ready to Focus?",
-            description: "Tap the tomato to start your first Pomodoro session. Your productive journey begins now!"
-        )
-    ]
-
-    var body: some View {
-        VStack(spacing: 40) {
-            Spacer()
-
-            // Progress dots
-            HStack(spacing: 8) {
-                ForEach(0..<welcomeSteps.count, id: \.self) { index in
-                    Circle()
-                        .fill(index <= currentStep ? Color.red : Color.gray.opacity(0.3))
-                        .frame(width: 8, height: 8)
-                        .animation(.easeInOut(duration: 0.3), value: currentStep)
-                }
-            }
-            .padding(.top, 20)
-
-            Spacer()
-
-            // Welcome content
-            VStack(spacing: 30) {
-                Text(welcomeSteps[currentStep].emoji)
-                    .font(.system(size: 80))
-                    .scaleEffect(1.0)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: currentStep)
-
-                VStack(spacing: 16) {
-                    Text(welcomeSteps[currentStep].title)
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.center)
-
-                    Text(welcomeSteps[currentStep].description)
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal, 30)
-            }
-
-            Spacer()
-
-            // Navigation buttons
-            HStack(spacing: 20) {
-                if currentStep > 0 {
-                    Button("Back") {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            currentStep -= 1
-                        }
-                    }
-                    .foregroundColor(.secondary)
-                }
-
-                Spacer()
-
-                Button(currentStep == welcomeSteps.count - 1 ? "Get Started!" : "Next") {
-                    if currentStep == welcomeSteps.count - 1 {
-                        withAnimation(.easeInOut(duration: 0.5)) {
-                            showingWelcome = false
-                        }
-                    } else {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            currentStep += 1
-                        }
-                    }
-                }
-                .font(.headline)
-                .foregroundColor(.white)
-                .padding(.horizontal, 30)
-                .padding(.vertical, 12)
-                .background(
-                    Capsule()
-                        .fill(currentStep == welcomeSteps.count - 1 ? Color.green : Color.red)
-                )
-            }
-            .padding(.horizontal, 30)
-
-            Spacer().frame(height: 50)
-        }
-    }
-}
-
-struct WelcomeStep {
-    let emoji: String
-    let title: String
-    let description: String
-}
-
-struct AppLockOverlay: View {
-    @ObservedObject var appLockManager: AppLockManager
-
-    var body: some View {
-        ZStack {
-            // Semi-transparent overlay
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .ignoresSafeArea()
-
-            VStack(spacing: 30) {
-                Image(systemName: "lock.shield.fill")
-                    .font(.system(size: 50))
-                    .foregroundColor(.orange)
-
-                VStack(spacing: 16) {
-                    Text("Focus Session Active")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-
-                    Text("You left during a focus session. Return to your timer to stay on track!")
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-                }
-
-                Button("Return to Focus") {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        appLockManager.showingUnlockAlert = false
-                    }
-                }
-                .font(.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.orange)
-                )
-                .padding(.horizontal, 40)
-            }
-        }
-    }
-}
-
-// Add this extension for consistent button styling
-#if DEBUG
-extension View {
-    func debugButtonStyle(_ color: Color) -> some View {
-        self
-            .font(.caption2)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(color)
-            .foregroundColor(.white)
-            .cornerRadius(4)
-    }
-}
-#endif
 
 #Preview {
     ContentView()
