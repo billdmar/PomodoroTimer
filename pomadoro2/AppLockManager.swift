@@ -25,15 +25,29 @@ class EnhancedAppLockManager: ObservableObject {
         "Games", "YouTube", "Netflix", "Shopping Apps"
     ]
 
+    /// Whether real Screen Time shielding is active (requires the user to grant
+    /// Family Controls authorization). When false, only the motivational nudges
+    /// below are in effect.
+    @Published var screenTimeAuthorized = false
+
     private var lockStartTime: Date?
     private var backgroundTime: Date?
     private var backgroundObserver: NSObjectProtocol?
     private var foregroundObserver: NSObjectProtocol?
     private let userDefaults = UserDefaults.standard
+    private let screenTime: ScreenTimeControlling
 
-    init() {
+    init(screenTime: ScreenTimeControlling = ScreenTimeControllerFactory.make()) {
+        self.screenTime = screenTime
         setupAppStateObservers()
         loadBlockedApps()
+    }
+
+    /// Asks for Family Controls authorization so focus sessions can apply real
+    /// app shields. No-op / stays false when the entitlement is absent.
+    @MainActor
+    func requestScreenTimeAuthorization() async {
+        screenTimeAuthorized = await screenTime.requestAuthorization()
     }
 
     deinit {
@@ -145,6 +159,10 @@ class EnhancedAppLockManager: ObservableObject {
         // Set up notification categories for interactive notifications
         setupNotificationCategories()
 
+        // Apply real app shields when Screen Time is authorized; otherwise this
+        // is a no-op and only the motivational nudges apply.
+        screenTime.startShielding()
+
         Log.debug("Enhanced app lock activated")
     }
 
@@ -160,6 +178,9 @@ class EnhancedAppLockManager: ObservableObject {
 
         // Cancel all pending return notifications
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+
+        // Lift any real app shields.
+        screenTime.stopShielding()
 
         Log.debug("Enhanced app lock deactivated")
     }
