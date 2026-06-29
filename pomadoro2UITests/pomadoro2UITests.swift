@@ -44,4 +44,27 @@ final class pomadoro2UITests: XCTestCase {
         let runningTimer = app.staticTexts["Focus time remaining"]
         XCTAssertTrue(runningTimer.waitForExistence(timeout: 5), "Running focus timer should be visible after starting")
     }
+
+    /// Opens the Stats screen and confirms the pass-2 additions render
+    /// (daily-goal ring + focus-history chart), capturing a screenshot.
+    @MainActor
+    func testStatsScreenShowsGoalAndHistory() throws {
+        let app = launchApp()
+
+        let statsButton = app.buttons["Stats and streak calendar"]
+        XCTAssertTrue(statsButton.waitForExistence(timeout: 5), "Stats button should be visible")
+        statsButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Daily Goal"].waitForExistence(timeout: 5),
+                      "Daily goal section should appear")
+        XCTAssertTrue(app.staticTexts["Focus History"].exists,
+                      "Focus history section should appear")
+        XCTAssertTrue(app.staticTexts["Achievements"].exists,
+                      "Achievements section should appear")
+
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "stats-screen"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
 }
