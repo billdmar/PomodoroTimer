@@ -109,6 +109,25 @@ struct TimerManagerTests {
         #expect(reloaded.completionSound == .bell)
     }
 
+    @Test func completingTheFirstFocusSessionUnlocksAnAchievement() {
+        let (m, _, _) = makeManager()
+        #expect(m.justUnlockedAchievement == nil)
+        // A 1-second focus session: start, then force the deadline to pass and
+        // recompute, which runs the completion path (and the achievement check).
+        m.updateSettings(focusMinutes: 1.0 / 60.0, breakMinutes: 5,
+                         focusEmoji: "🍅", breakEmoji: "😌")
+        m.startTimer()
+        // Busy-wait a hair past the 1s deadline, then recompute.
+        let deadline = Date().addingTimeInterval(1.1)
+        while Date() < deadline { /* spin briefly */ }
+        m.recompute()
+        // First-ever completed session → "First Session" badge fires.
+        #expect(m.justUnlockedAchievement?.id == "first_session")
+
+        m.dismissAchievement()
+        #expect(m.justUnlockedAchievement == nil)
+    }
+
     @Test func crashRecoveryRestoresAPausedSession() {
         let suite = "TimerManagerTests.recovery.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
