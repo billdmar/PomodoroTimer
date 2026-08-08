@@ -13,8 +13,6 @@ struct HistoryChartView: View {
     let data: [DailyFocus]
     let accent: Color
 
-    private var maxMinutes: Int { max(data.map(\.minutes).max() ?? 0, 1) }
-
     var body: some View {
         Chart(data) { day in
             BarMark(

@@ -2,17 +2,22 @@
 //  AppLockManager.swift
 //  pomadoro2
 //
-//  Enhanced app lock with better user retention strategies
+//  Focus-mode app lock: keeps the screen awake during a focus session, applies
+//  real Screen Time shielding when authorized, and posts return-to-focus
+//  reminders (with a graceful motivational fallback) if the user leaves.
 //
 
 import SwiftUI
 import UIKit
 import UserNotifications
 
-// Create a type alias to use the enhanced version
-typealias AppLockManager = EnhancedAppLockManager
+class AppLockManager: ObservableObject {
+    /// Identifiers of the return-reminder notifications this manager schedules,
+    /// so it can cancel exactly those without clobbering unrelated pending
+    /// notifications (e.g. the timer-completion alert).
+    private static let reminderIdentifiers =
+        ["immediate-return"] + (0..<4).map { "return-reminder-\($0)" }
 
-class EnhancedAppLockManager: ObservableObject {
     @Published var isAppLocked = false
     @Published var showingUnlockAlert = false
     @Published var unlockAttempts = 0
@@ -96,8 +101,8 @@ class EnhancedAppLockManager: ObservableObject {
                 unlockAttempts += 1
             }
 
-            // Cancel pending notifications since they're back
-            UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+            // Cancel our return reminders since the user is back.
+            cancelReturnNotifications()
         }
     }
 
@@ -154,7 +159,7 @@ class EnhancedAppLockManager: ObservableObject {
         // is a no-op and only the motivational nudges apply.
         screenTime.startShielding()
 
-        Log.debug("Enhanced app lock activated")
+        Log.debug("App lock activated")
     }
 
     func unlockApp() {
@@ -166,13 +171,22 @@ class EnhancedAppLockManager: ObservableObject {
         // Re-enable normal functionality
         UIApplication.shared.isIdleTimerDisabled = false
 
-        // Cancel all pending return notifications
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        // Cancel our pending return reminders.
+        cancelReturnNotifications()
 
         // Lift any real app shields.
         screenTime.stopShielding()
 
-        Log.debug("Enhanced app lock deactivated")
+        Log.debug("App lock deactivated")
+    }
+
+    /// Removes only the return-reminder notifications this manager schedules,
+    /// leaving other pending notifications (e.g. the timer-completion alert)
+    /// intact.
+    private func cancelReturnNotifications() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: Self.reminderIdentifiers
+        )
     }
 
     private func setupNotificationCategories() {

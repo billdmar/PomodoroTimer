@@ -38,7 +38,7 @@ design choices are:
 | --- | --- | --- |
 | App entry | `pomadoro2App`, `AppDelegate` | Configure Firebase, register notification actions, host the root view |
 | Views | `ContentView`, `SettingsView`, `StatsView`, `LeaderboardView`, `WelcomeView`, plus extracted components (`ProgressRingView`, `DynamicBackgroundView`, `TimerComponents`, `HistoryChartView`, `AchievementOverlay`, `TomatoButton`, `StarParticlesView`) | Presentation, animation, user input |
-| Facade / view model | `TimerManager` (`@MainActor`), `FirebaseManager`, `EnhancedAppLockManager` (aliased `AppLockManager`) | Orchestration, OS integration, networking |
+| Facade / view model | `TimerManager` (`@MainActor`), `FirebaseManager`, `AppLockManager` | Orchestration, OS integration, networking |
 | Timer engine | `SessionEngine` (`@MainActor`) | Owns the `TimerState` machine + UI tick; reports via `onTick` / `onFinished` |
 | Pure logic | `TimerMath`, `StreakCalculator`, `StatsCalculator`, `BreakPolicy`, `AchievementEvaluator`, `GoalMath`, `HistoryAggregator`, `SessionRecovery` | Deterministic, unit-tested helpers |
 | State model | `TimerState` (+ `TimerConstants`), `StatsState`, `SessionSnapshot`, `SharedSessionState`, `PendingCommand` | Value types the logic and stores operate on |
@@ -381,9 +381,9 @@ the bundled client config) and enforces least privilege:
   16.1+ and on activities being enabled, so it is a safe no-op otherwise. The
   widget extension renders it (`PomodoroLiveActivity`), including the Dynamic
   Island, which only appears on devices that have it.
-- **Focus-mode lock + Screen Time** — `EnhancedAppLockManager` (aliased
-  `AppLockManager`) provides the in-app retention nudge (escalating "return to
-  focus" notifications, idle-timer disable, the `AppLockOverlay`). For *real*
+- **Focus-mode lock + Screen Time** — `AppLockManager` provides the in-app
+  retention nudge (escalating "return to focus" notifications, idle-timer
+  disable, the `AppLockOverlay`). For *real*
   system-level blocking it delegates to `ScreenTimeController`
   (`FamilyControls`/`ManagedSettings`). **This is entitlement-gated:** the
   frameworks compile and link without the `com.apple.developer.family-controls`

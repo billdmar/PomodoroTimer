@@ -25,6 +25,7 @@ struct TimerManagerTests {
         let manager = TimerManager(
             backend: backend,
             defaults: defaults,
+            sharedDefaults: defaults,
             enableExternalServices: false
         )
         return (manager, backend, defaults)
@@ -59,6 +60,20 @@ struct TimerManagerTests {
         #expect(m.isRunning)         // skip restarts immediately
     }
 
+    @Test func skipWhileIdleSwitchesModeWithoutCreditingStats() {
+        let (m, backend, _) = makeManager()
+        #expect(m.isFocusMode)
+        #expect(m.todayFocusMinutes == 0)
+        // Skipping an idle focus timer should just advance to break — never run
+        // the completion path (which would credit unearned focus minutes).
+        m.skipTimer()
+        #expect(!m.isFocusMode)              // advanced to break
+        #expect(!m.isRunning)                // still idle
+        #expect(m.todayFocusMinutes == 0)    // no unearned credit
+        #expect(m.totalSessions == 0)
+        #expect(backend.loggedSessions.isEmpty)
+    }
+
     @Test func switchModeFlipsModeAndStaysStopped() {
         let (m, _, _) = makeManager()
         m.switchMode()
@@ -84,7 +99,7 @@ struct TimerManagerTests {
 
         // A brand-new manager over the same defaults sees the persisted values.
         let reloaded = TimerManager(backend: MockStatsBackend(), defaults: defaults,
-                                    enableExternalServices: false)
+                                    sharedDefaults: defaults, enableExternalServices: false)
         #expect(reloaded.focusDuration == 50 * 60)
         #expect(reloaded.longBreakDuration == 20 * 60)
         #expect(reloaded.focusEmoji == "🔥")
@@ -95,7 +110,7 @@ struct TimerManagerTests {
         m.setDailyGoal(minutes: 90)
         #expect(m.dailyGoalMinutes == 90)
         let reloaded = TimerManager(backend: MockStatsBackend(), defaults: defaults,
-                                    enableExternalServices: false)
+                                    sharedDefaults: defaults, enableExternalServices: false)
         #expect(reloaded.dailyGoalMinutes == 90)
     }
 
@@ -103,7 +118,7 @@ struct TimerManagerTests {
         let (m, _, defaults) = makeManager()
         m.updateAppearance(accent: .grape, appearance: .dark, sound: .bell)
         let reloaded = TimerManager(backend: MockStatsBackend(), defaults: defaults,
-                                    enableExternalServices: false)
+                                    sharedDefaults: defaults, enableExternalServices: false)
         #expect(reloaded.accentTheme == .grape)
         #expect(reloaded.appearanceMode == .dark)
         #expect(reloaded.completionSound == .bell)
@@ -112,14 +127,15 @@ struct TimerManagerTests {
     @Test func completingTheFirstFocusSessionUnlocksAnAchievement() {
         let (m, _, _) = makeManager()
         #expect(m.justUnlockedAchievement == nil)
-        // A 1-second focus session: start, then force the deadline to pass and
-        // recompute, which runs the completion path (and the achievement check).
-        m.updateSettings(focusMinutes: 1.0 / 60.0, breakMinutes: 5,
+        // A zero-length focus session reaches its deadline the instant it starts
+        // (the engine anchors endDate to now, and completion is `now >= endDate`),
+        // so a single recompute() drives the full completion path — and the
+        // achievement check — deterministically, with no wall-clock spin. A
+        // completed session increments the session count regardless of its
+        // minutes, which is what "First Session" unlocks on.
+        m.updateSettings(focusMinutes: 0, breakMinutes: 5,
                          focusEmoji: "🍅", breakEmoji: "😌")
         m.startTimer()
-        // Busy-wait a hair past the 1s deadline, then recompute.
-        let deadline = Date().addingTimeInterval(1.1)
-        while Date() < deadline { /* spin briefly */ }
         m.recompute()
         // First-ever completed session → "First Session" badge fires.
         #expect(m.justUnlockedAchievement?.id == "first_session")
@@ -143,7 +159,7 @@ struct TimerManagerTests {
         ))
 
         let recovered = TimerManager(backend: MockStatsBackend(), defaults: defaults,
-                                     enableExternalServices: false)
+                                     sharedDefaults: defaults, enableExternalServices: false)
         // Restored paused (the user resumes explicitly), near the saved time.
         #expect(!recovered.isRunning)
         #expect(recovered.timeRemaining <= 600)

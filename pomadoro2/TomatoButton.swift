@@ -20,7 +20,7 @@ struct TomatoButton: View {
                     .allowsHitTesting(false)
             }
 
-            // Only show button when timer is NOT running and emoji is at bottom (scale = 1.0)
+            // Only show the start button when the timer is not running.
             if !timerManager.isRunning {
                 Button(action: {
                     startPomodoro()
@@ -58,9 +58,7 @@ struct TomatoButton: View {
                     withAnimation(.easeInOut(duration: 0.1)) {
                         isPressed = pressing
                     }
-                }, perform: {
-                    // This won't be called since minimumDuration is 0
-                })
+                }, perform: {})
                 .accessibilityLabel(timerManager.isFocusMode ? "Start focus session" : "Start break")
                 .accessibilityHint("Double tap to begin the timer")
             }
