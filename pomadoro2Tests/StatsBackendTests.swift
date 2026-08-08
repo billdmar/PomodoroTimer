@@ -2,9 +2,10 @@
 //  StatsBackendTests.swift
 //  pomadoro2Tests
 //
-//  Demonstrates that the StatsBackend protocol seam makes the backend mockable
-//  without Firebase: a fake backend records calls and returns canned data, so
-//  consumer logic can be exercised in a plain unit test.
+//  Exercises the StatsBackend protocol seam via the in-memory MockStatsBackend:
+//  that saves/loads round-trip, the leaderboard respects its limit, and logged
+//  sessions are recorded. This verifies the mock (and the seam that makes it
+//  possible); TimerManagerTests covers the production consumer that drives it.
 //
 
 import Testing

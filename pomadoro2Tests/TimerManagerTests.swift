@@ -127,14 +127,15 @@ struct TimerManagerTests {
     @Test func completingTheFirstFocusSessionUnlocksAnAchievement() {
         let (m, _, _) = makeManager()
         #expect(m.justUnlockedAchievement == nil)
-        // A 1-second focus session: start, then force the deadline to pass and
-        // recompute, which runs the completion path (and the achievement check).
-        m.updateSettings(focusMinutes: 1.0 / 60.0, breakMinutes: 5,
+        // A zero-length focus session reaches its deadline the instant it starts
+        // (the engine anchors endDate to now, and completion is `now >= endDate`),
+        // so a single recompute() drives the full completion path — and the
+        // achievement check — deterministically, with no wall-clock spin. A
+        // completed session increments the session count regardless of its
+        // minutes, which is what "First Session" unlocks on.
+        m.updateSettings(focusMinutes: 0, breakMinutes: 5,
                          focusEmoji: "🍅", breakEmoji: "😌")
         m.startTimer()
-        // Busy-wait a hair past the 1s deadline, then recompute.
-        let deadline = Date().addingTimeInterval(1.1)
-        while Date() < deadline { /* spin briefly */ }
         m.recompute()
         // First-ever completed session → "First Session" badge fires.
         #expect(m.justUnlockedAchievement?.id == "first_session")
