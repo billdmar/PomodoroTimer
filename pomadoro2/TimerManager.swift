@@ -2,7 +2,9 @@
 //  TimerManager.swift
 //  pomadoro2
 //
-//  Enhanced with missing debug methods and app lock manager
+//  The @MainActor facade the SwiftUI views observe. Orchestrates the
+//  SessionEngine (countdown), stats, app lock, notifications, Live Activity,
+//  and the shared App Group state the widget/App Intents read.
 //
 
 import Foundation
@@ -101,10 +103,17 @@ class TimerManager: ObservableObject {
     /// Designated initializer. All dependencies default to production, so
     /// `TimerManager()` works for the app; tests inject a mock backend, an
     /// isolated `UserDefaults`, and `enableExternalServices: false`.
+    ///
+    /// `defaults` backs the app-private stores (settings, stats, session
+    /// recovery). `sharedDefaults` backs the cross-process stores the widget,
+    /// Live Activity, and App Intents / Siri / Control Center also read, so it
+    /// must be the App Group suite — hence it defaults to `SharedConfig.defaults`
+    /// rather than `defaults`. Tests pass an isolated suite for both.
     init(
         firebaseManager: FirebaseManager = FirebaseManager(),
         backend: StatsBackend? = nil,
         defaults: UserDefaults = .standard,
+        sharedDefaults: UserDefaults = SharedConfig.defaults,
         enableExternalServices: Bool = true
     ) {
         self.firebaseManager = firebaseManager
@@ -112,11 +121,11 @@ class TimerManager: ObservableObject {
         self.settingsStore = SettingsStore(defaults: defaults)
         self.sessionStore = SessionStore(defaults: defaults)
         self.statsPersistence = StatsPersistence(defaults: defaults)
-        self.sharedSessionStore = SharedSessionStore(defaults: defaults)
+        self.sharedSessionStore = SharedSessionStore(defaults: sharedDefaults)
         self.goalStore = GoalStore(defaults: defaults)
         self.historyStore = DailyHistoryStore(defaults: defaults)
         self.appearanceStore = AppearanceSettingsStore(defaults: defaults)
-        self.pendingCommandStore = PendingCommandStore(defaults: defaults)
+        self.pendingCommandStore = PendingCommandStore(defaults: sharedDefaults)
         self.externalServicesEnabled = enableExternalServices
         self.engine = SessionEngine(initialRemaining: TimerConstants.defaultFocusDuration)
 
@@ -423,7 +432,10 @@ class TimerManager: ObservableObject {
             timeRemaining = isFocusMode ? focusDuration : breakDuration
             startTimer()
         } else {
-            timerCompleted()
+            // Idle: just advance to the other mode. Do NOT run timerCompleted()
+            // here — that would credit a full focus session (stats, streak,
+            // achievement, backend log) for time never spent.
+            switchMode()
         }
     }
 
@@ -465,16 +477,17 @@ class TimerManager: ObservableObject {
             isLongBreak = nextBreakIsLong
 
             // Surface the first achievement newly earned by this session, so the
-            // UI can celebrate it. Uses the previously-dead newlyUnlocked logic.
+            // UI can celebrate it.
             if let unlockedID = AchievementEvaluator.newlyUnlocked(from: statsBefore, to: statsSnapshot).first,
                let achievement = AchievementEvaluator.catalog.first(where: { $0.id == unlockedID }) {
                 justUnlockedAchievement = achievement
                 if externalServicesEnabled { Haptics.success() }
             }
 
-            // Log session to the backend
+            // Log session to the backend. Capture `backend` explicitly so the
+            // detached Task doesn't retain self (consistent with syncWithFirebase).
             let minutes = focusMinutes
-            Task { await backend.logFocusSession(duration: minutes, completedAt: Date()) }
+            Task { [backend] in await backend.logFocusSession(duration: minutes, completedAt: Date()) }
         }
 
         // Announce what's next (a long break is the reward for completing the

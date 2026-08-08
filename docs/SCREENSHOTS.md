@@ -32,8 +32,10 @@ device-framed PNG to your Desktop. Capture:
 
 ## 4. Drop them in and push
 ```bash
-# rename the captured PNGs to the names above, then:
-cp ~/Desktop/timer.png ~/Desktop/settings.png ~/Desktop/leaderboard.png docs/
+# rename the captured PNGs to the names above, then copy all seven in:
+cp ~/Desktop/home.png ~/Desktop/timer.png ~/Desktop/break.png \
+   ~/Desktop/settings.png ~/Desktop/stats.png ~/Desktop/leaderboard.png \
+   ~/Desktop/skip.png docs/
 git add docs/*.png
 git commit -m "docs: add app screenshots"
 git push

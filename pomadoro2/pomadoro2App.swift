@@ -10,7 +10,7 @@ import Firebase
 import UIKit
 import UserNotifications
 
-// Add AppDelegate class to properly conform to UIApplicationDelegate
+/// Configures Firebase and notification handling at launch.
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         FirebaseApp.configure()
@@ -23,7 +23,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
 @main
 struct pomadoro2App: App {
-    // Register the AppDelegate
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     var body: some Scene {
