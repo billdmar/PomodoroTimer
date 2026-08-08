@@ -2,7 +2,8 @@
 //  ContentView.swift
 //  pomadoro2
 //
-//  Enhanced with smooth transitions between timer states
+//  The root screen: welcome, the idle timer face, the full-screen running
+//  session, and the app-lock / achievement overlays.
 //
 
 import SwiftUI
@@ -23,7 +24,6 @@ struct ContentView: View {
     @State private var showingSkipConfirmation = false
 
     // Animation state for smooth transitions
-    @State private var isTransitioning = false
     @State private var scaleEffect: CGFloat = 1.0
     @State private var backgroundOpacity: Double = 1.0
 
@@ -140,16 +140,8 @@ struct ContentView: View {
         // Animation when timer state changes
         .onChange(of: timerManager.isRunning) { _, newValue in
             withAnimation(.easeInOut(duration: 0.6)) {
-                isTransitioning = true
                 scaleEffect = newValue ? 1.1 : 1.0
                 backgroundOpacity = newValue ? 0.8 : 1.0
-            }
-
-            // Reset transition state
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    isTransitioning = false
-                }
             }
         }
 #if DEBUG

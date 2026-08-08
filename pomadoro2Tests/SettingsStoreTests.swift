@@ -14,8 +14,8 @@ struct SettingsStoreTests {
 
     /// An isolated UserDefaults suite so tests never touch `.standard`.
     private func makeIsolatedDefaults() -> UserDefaults {
-        // Vary the suite name per test by content; a fixed-but-unique name is
-        // cleared at the start so each run is deterministic.
+        // A fresh random suite per call, cleared before use, so each test runs
+        // against a clean, isolated store.
         let suite = "SettingsStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)

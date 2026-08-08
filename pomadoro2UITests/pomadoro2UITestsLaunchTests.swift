@@ -22,8 +22,8 @@ final class pomadoro2UITestsLaunchTests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        // Insert steps here to perform after app launch but before taking a screenshot,
-        // such as logging into a test account or navigating somewhere in the app
+        // The app should reach a running, interactive state on launch.
+        XCTAssertEqual(app.state, .runningForeground)
 
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "Launch Screen"

@@ -2,7 +2,8 @@
 //  SettingsView.swift
 //  pomadoro2
 //
-//  Enhanced with live timer updates and cleaned up status section
+//  Timer, appearance, and sound settings. Controls apply changes live; Cancel
+//  restores the values captured when the sheet opened.
 //
 
 import SwiftUI
@@ -19,6 +20,23 @@ struct SettingsView: View {
     @State private var accent: AccentTheme = .tomato
     @State private var appearance: AppearanceMode = .system
     @State private var sound: CompletionSound = .classic
+
+    /// The settings as they were when the sheet opened. Every control applies
+    /// changes to `timerManager` live (via onChange), so Cancel must restore
+    /// from this snapshot — reading `timerManager` back would only return the
+    /// already-mutated values.
+    @State private var original: Snapshot?
+
+    private struct Snapshot {
+        let focusMinutes: Double
+        let breakMinutes: Double
+        let longBreakMinutes: Double
+        let focusEmoji: String
+        let breakEmoji: String
+        let accent: AccentTheme
+        let appearance: AppearanceMode
+        let sound: CompletionSound
+    }
 
     var body: some View {
         NavigationView {
@@ -336,7 +354,7 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        // Reset to original values when canceling
+                        // Restore the values captured when the sheet opened.
                         resetToOriginalValues()
                         dismiss()
                     }
@@ -360,6 +378,18 @@ struct SettingsView: View {
         accent = timerManager.accentTheme
         appearance = timerManager.appearanceMode
         sound = timerManager.completionSound
+
+        // Capture originals once, so Cancel can restore them after live edits.
+        original = Snapshot(
+            focusMinutes: focusMinutes,
+            breakMinutes: breakMinutes,
+            longBreakMinutes: longBreakMinutes,
+            focusEmoji: focusEmojiText,
+            breakEmoji: breakEmojiText,
+            accent: accent,
+            appearance: appearance,
+            sound: sound
+        )
     }
 
     private func updateTimerSettings() {
@@ -378,12 +408,20 @@ struct SettingsView: View {
     }
 
     private func resetToOriginalValues() {
-        // Reset timer to original values if user cancels
+        // Restore every setting the sheet may have changed live, from the
+        // snapshot taken when it opened.
+        guard let original else { return }
         timerManager.updateSettings(
-            focusMinutes: timerManager.focusDuration / 60,
-            breakMinutes: timerManager.breakDuration / 60,
-            focusEmoji: timerManager.focusEmoji,
-            breakEmoji: timerManager.breakEmoji
+            focusMinutes: original.focusMinutes,
+            breakMinutes: original.breakMinutes,
+            focusEmoji: original.focusEmoji,
+            breakEmoji: original.breakEmoji,
+            longBreakMinutes: original.longBreakMinutes
+        )
+        timerManager.updateAppearance(
+            accent: original.accent,
+            appearance: original.appearance,
+            sound: original.sound
         )
     }
 }
